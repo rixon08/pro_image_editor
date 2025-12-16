@@ -36,6 +36,9 @@ enum PaintMode {
 
   /// Creates an area that will pixelate the background.
   pixelate,
+
+  /// Places a location pin marker.
+  locationPin,
 }
 
 /// Defines the available erasing modes.

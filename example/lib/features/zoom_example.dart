@@ -99,13 +99,52 @@ class _ZoomExampleState extends State<ZoomExample>
                 ];
               },
             )),
-        paintEditor: const PaintEditorConfigs(
+        paintEditor: PaintEditorConfigs(
           enableZoom: true,
           editorMinScale: 0.8,
           editorMaxScale: 5,
-          boundaryMargin: EdgeInsets.all(100),
-          icons: PaintEditorIcons(
+          boundaryMargin: const EdgeInsets.all(100),
+          icons: const PaintEditorIcons(
             moveAndZoom: Icons.pinch_outlined,
+            locationPin: Icons.location_pin,
+          ),
+          tools: const [
+            PaintMode.moveAndZoom,
+            PaintMode.freeStyle,
+            PaintMode.arrow,
+            PaintMode.line,
+            PaintMode.rect,
+            PaintMode.circle,
+            PaintMode.locationPin,
+          ],
+        ),
+        layerInteraction: const LayerInteractionConfigs(
+          /// Choose between `auto`, `enabled` and `disabled`.
+          ///
+          /// Mode `auto`:
+          /// Automatically determines if the layer is selectable based on the
+          /// device type.
+          /// If the device is a desktop-device, the layer is selectable;
+          /// otherwise, the layer is not selectable.
+          selectable: LayerInteractionSelectable.enabled,
+          initialSelected: true,
+          icons: LayerInteractionIcons(
+            remove: Icons.clear,
+            edit: Icons.edit_outlined,
+            rotateScale: Icons.sync,
+          ),
+          style: LayerInteractionStyle(
+            buttonRadius: 10,
+            strokeWidth: 1.2,
+            borderElementWidth: 7,
+            borderElementSpace: 5,
+            borderColor: Colors.blue,
+            removeCursor: SystemMouseCursors.click,
+            rotateScaleCursor: SystemMouseCursors.click,
+            editCursor: SystemMouseCursors.click,
+            hoverCursor: SystemMouseCursors.move,
+            borderStyle: LayerInteractionBorderStyle.solid,
+            showTooltips: false,
           ),
         ),
         i18n: const I18n(

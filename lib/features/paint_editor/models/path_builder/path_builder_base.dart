@@ -9,6 +9,7 @@ import 'path_builder_dash_dot_line.dart';
 import 'path_builder_dash_line.dart';
 import 'path_builder_freestyle.dart';
 import 'path_builder_line.dart';
+import 'path_builder_location_pin.dart';
 import 'path_builder_polygon.dart';
 import 'path_builder_rectangular.dart';
 
@@ -75,6 +76,12 @@ abstract class PathBuilderBase {
         );
       case PaintMode.freeStyle:
         return PathBuilderFreestyle(
+          paintEditorConfigs: paintEditorConfigs,
+          item: item,
+          scale: scale,
+        );
+      case PaintMode.locationPin:
+        return PathBuilderLocationPin(
           paintEditorConfigs: paintEditorConfigs,
           item: item,
           scale: scale,

@@ -140,12 +140,14 @@ class PaintedModel {
   /// - [PaintMode.circle]: A circular shape that can be filled.
   /// - [PaintMode.rect]: A rectangular shape that can be filled.
   /// - [PaintMode.polygon]: A polygonal shape that can be filled.
+  /// - [PaintMode.locationPin]: A location pin marker that can be filled.
   ///
   /// Returns `false` for other paint modes that do not support filling.
   bool get canBeFilled {
     return mode == PaintMode.circle ||
         mode == PaintMode.rect ||
-        mode == PaintMode.polygon;
+        mode == PaintMode.polygon ||
+        mode == PaintMode.locationPin;
   }
 
   /// Creates a copy of this PaintedModel instance.

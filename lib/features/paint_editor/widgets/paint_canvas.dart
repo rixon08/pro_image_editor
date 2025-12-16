@@ -383,6 +383,13 @@ class PaintCanvasState extends State<PaintCanvas> {
             if (_paintCtrl.mode == PaintMode.polygon) {
               _addPolygonPoint(details.localPosition);
               _checkPolygonIsComplete();
+            } else if (_paintCtrl.mode == PaintMode.locationPin) {
+              // Location pin is drawn on tap
+              _paintCtrl
+                ..setStart(details.localPosition)
+                ..setEnd(details.localPosition)
+                ..addOffsets(details.localPosition);
+              _onScaleEnd(ScaleEndDetails());
             } else if (_paintCtrl.mode == PaintMode.freeStyle ||
                 _paintCtrl.mode == PaintMode.eraser) {
               _onScaleStart(ScaleStartDetails(

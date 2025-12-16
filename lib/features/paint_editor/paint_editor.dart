@@ -439,6 +439,11 @@ class PaintEditorState extends State<PaintEditor>
             icon: paintEditorConfigs.icons.eraser,
             label: i18n.paintEditor.eraser,
           );
+        case PaintMode.locationPin:
+          return PaintModeHelper(
+            icon: paintEditorConfigs.icons.locationPin,
+            label: i18n.paintEditor.locationPin,
+          );
         case PaintMode.moveAndZoom:
           if (!paintEditorConfigs.enableZoom) return null;
           return PaintModeHelper(
@@ -737,6 +742,21 @@ class PaintEditorState extends State<PaintEditor>
 
     // Find extreme points of the paint layer
     Rect? layerRect = findRenderedLayerRect(rawLayer.offsets);
+
+    // Special handling for locationPin - calculate bounding box based on icon size
+    if (rawLayer.mode == PaintMode.locationPin && rawLayer.offsets.isNotEmpty && rawLayer.offsets[0] != null) {
+      final center = rawLayer.offsets[0]!;
+      final baseSize = rawLayer.strokeWidth > 0 ? rawLayer.strokeWidth : 24.0;
+      final iconSize = baseSize * 2.0;
+      final halfSize = iconSize / 2.0;
+      
+      layerRect = Rect.fromLTWH(
+        center.dx - halfSize,
+        center.dy - halfSize,
+        iconSize,
+        iconSize,
+      );
+    }
 
     Size size = layerRect.size;
 

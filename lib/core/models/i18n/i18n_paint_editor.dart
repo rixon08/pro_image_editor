@@ -20,6 +20,7 @@ class I18nPaintEditor {
     this.polygon = 'Polygon',
     this.blur = 'Blur',
     this.pixelate = 'Pixelate',
+    this.locationPin = 'Location Pin',
     this.lineWidth = 'Line width',
     this.eraser = 'Eraser',
     this.toggleFill = 'Toggle fill',
@@ -71,6 +72,9 @@ class I18nPaintEditor {
 
   /// Text for the "Pixelate" paint mode.
   final String pixelate;
+
+  /// Text for the "Location Pin" paint mode.
+  final String locationPin;
 
   /// Text for the "Eraser" paint mode.
   final String eraser;
@@ -133,6 +137,7 @@ class I18nPaintEditor {
     String? polygon,
     String? blur,
     String? pixelate,
+    String? locationPin,
     String? eraser,
     String? lineWidth,
     String? toggleFill,
@@ -162,6 +167,7 @@ class I18nPaintEditor {
       polygon: polygon ?? this.polygon,
       blur: blur ?? this.blur,
       pixelate: pixelate ?? this.pixelate,
+      locationPin: locationPin ?? this.locationPin,
       eraser: eraser ?? this.eraser,
       lineWidth: lineWidth ?? this.lineWidth,
       toggleFill: toggleFill ?? this.toggleFill,

@@ -29,6 +29,7 @@ class PaintEditorIcons {
     this.backButton = Icons.arrow_back,
     this.undoAction = Icons.undo,
     this.redoAction = Icons.redo,
+    this.locationPin = Icons.location_pin,
   });
 
   /// The icon to be displayed in the bottom navigation bar.
@@ -101,6 +102,9 @@ class PaintEditorIcons {
   /// The icon for redoing the last undone action.
   final IconData redoAction;
 
+  /// The icon for location pin.
+  final IconData locationPin;
+
   /// Creates a copy of this [PaintEditorIcons] with updated values.
   PaintEditorIcons copyWith({
     IconData? moveAndZoom,
@@ -124,6 +128,7 @@ class PaintEditorIcons {
     IconData? undoAction,
     IconData? redoAction,
     IconData? applyChanges,
+    IconData? locationPin,
   }) {
     return PaintEditorIcons(
       moveAndZoom: moveAndZoom ?? this.moveAndZoom,
@@ -147,6 +152,7 @@ class PaintEditorIcons {
       applyChanges: applyChanges ?? this.applyChanges,
       undoAction: undoAction ?? this.undoAction,
       redoAction: redoAction ?? this.redoAction,
+      locationPin: locationPin ?? this.locationPin,
     );
   }
 }
