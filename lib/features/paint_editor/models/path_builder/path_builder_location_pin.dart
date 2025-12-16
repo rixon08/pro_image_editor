@@ -26,9 +26,9 @@ class PathBuilderLocationPin extends PathBuilderBase {
     build();
 
     final center = start;
-    // Use a fixed size or scale based on stroke width
-    final baseSize = item.strokeWidth > 0 ? item.strokeWidth * scale : 24 * scale;
-    final iconSize = baseSize * 2;
+    // Use stroke width to determine icon size, with minimum size for visibility
+    final baseSize = (item.strokeWidth > 0 ? item.strokeWidth : 8.0) * scale;
+    final iconSize = baseSize * 2.5;
 
     // Get icon data
     final iconData = paintEditorConfigs.icons.locationPin;
@@ -59,8 +59,8 @@ class PathBuilderLocationPin extends PathBuilderBase {
     if (offsets.isEmpty || offsets[0] == null) return false;
     
     final center = start;
-    final baseSize = item.strokeWidth > 0 ? item.strokeWidth * scale : 24 * scale;
-    final iconSize = baseSize * 2;
+    final baseSize = (item.strokeWidth > 0 ? item.strokeWidth : 8.0) * scale;
+    final iconSize = baseSize * 2.5;
     final radius = iconSize / 2;
     
     // Simple circular hit test

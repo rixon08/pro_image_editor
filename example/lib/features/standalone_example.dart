@@ -136,6 +136,20 @@ class _StandaloneExampleState extends State<StandaloneExample>
         enableFakeHero: true,
         convertToUint8List: true,
         configs: ProImageEditorConfigs(
+          paintEditor: const PaintEditorConfigs(
+            enableZoom: true,
+            editorMinScale: 0.8,
+            editorMaxScale: 5,
+            tools: [
+              PaintMode.moveAndZoom,
+              PaintMode.freeStyle,
+              PaintMode.arrow,
+              PaintMode.line,
+              PaintMode.rect,
+              PaintMode.circle,
+              PaintMode.locationPin
+            ],
+          ),
           designMode: platformDesignMode,
           imageGeneration: const ImageGenerationConfigs(
 

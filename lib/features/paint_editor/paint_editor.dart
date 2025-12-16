@@ -746,8 +746,8 @@ class PaintEditorState extends State<PaintEditor>
     // Special handling for locationPin - calculate bounding box based on icon size
     if (rawLayer.mode == PaintMode.locationPin && rawLayer.offsets.isNotEmpty && rawLayer.offsets[0] != null) {
       final center = rawLayer.offsets[0]!;
-      final baseSize = rawLayer.strokeWidth > 0 ? rawLayer.strokeWidth : 24.0;
-      final iconSize = baseSize * 2.0;
+      final baseSize = rawLayer.strokeWidth > 0 ? rawLayer.strokeWidth : 8.0;
+      final iconSize = baseSize * 2.5;
       final halfSize = iconSize / 2.0;
       
       layerRect = Rect.fromLTWH(
