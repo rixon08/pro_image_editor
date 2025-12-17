@@ -39,6 +39,9 @@ enum PaintMode {
 
   /// Places a location pin marker.
   locationPin,
+
+  /// Creates a cloud shape with scalloped border.
+  cloud,
 }
 
 /// Defines the available erasing modes.

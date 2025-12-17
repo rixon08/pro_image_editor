@@ -25,6 +25,7 @@ import '/shared/services/shader_manager.dart';
 import '/shared/styles/platform_text_styles.dart';
 import '/shared/utils/file_constructor_utils.dart';
 import '/shared/widgets/auto_image.dart';
+import '/shared/widgets/cloud_icon.dart';
 import '/shared/widgets/extended/interactive_viewer/extended_interactive_viewer.dart';
 import '/shared/widgets/layer/layer_stack.dart';
 import '/shared/widgets/slider_bottom_sheet.dart';
@@ -444,6 +445,11 @@ class PaintEditorState extends State<PaintEditor>
             icon: paintEditorConfigs.icons.locationPin,
             label: i18n.paintEditor.locationPin,
           );
+        case PaintMode.cloud:
+          return PaintModeHelper(
+            customIcon: CloudIcon(size: 24, color: Colors.black), // Color will be changed by ColorFiltered
+            label: 'Cloud',
+          );
         case PaintMode.moveAndZoom:
           if (!paintEditorConfigs.enableZoom) return null;
           return PaintModeHelper(
@@ -463,6 +469,7 @@ class PaintEditorState extends State<PaintEditor>
             PaintModeBottomBarItem(
               mode: tool,
               icon: element.icon,
+              customIcon: element.customIcon,
               label: element.label,
             ),
           );

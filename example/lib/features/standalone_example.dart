@@ -147,6 +147,7 @@ class _StandaloneExampleState extends State<StandaloneExample>
               PaintMode.line,
               PaintMode.rect,
               PaintMode.circle,
+              PaintMode.cloud,
               PaintMode.locationPin
             ],
           ),

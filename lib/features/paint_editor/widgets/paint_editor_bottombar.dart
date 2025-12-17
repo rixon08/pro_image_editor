@@ -101,7 +101,15 @@ class PaintEditorBottombar extends StatelessWidget {
                           item.label,
                           style: TextStyle(fontSize: 10.0, color: color),
                         ),
-                        icon: Icon(item.icon, color: color),
+                        icon: item.customIcon != null
+                            ? ColorFiltered(
+                                colorFilter: ColorFilter.mode(
+                                  color,
+                                  BlendMode.srcIn,
+                                ),
+                                child: item.customIcon!,
+                              )
+                            : Icon(item.icon, color: color),
                         onPressed: () {
                           setMode(item.mode);
                         },

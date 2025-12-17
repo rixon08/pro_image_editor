@@ -5,6 +5,7 @@ import '../../enums/paint_editor_enum.dart';
 import '../painted_model.dart';
 import 'path_builder_arrow.dart';
 import 'path_builder_circle.dart';
+import 'path_builder_cloud.dart';
 import 'path_builder_dash_dot_line.dart';
 import 'path_builder_dash_line.dart';
 import 'path_builder_freestyle.dart';
@@ -82,6 +83,12 @@ abstract class PathBuilderBase {
         );
       case PaintMode.locationPin:
         return PathBuilderLocationPin(
+          paintEditorConfigs: paintEditorConfigs,
+          item: item,
+          scale: scale,
+        );
+      case PaintMode.cloud:
+        return PathBuilderCloud(
           paintEditorConfigs: paintEditorConfigs,
           item: item,
           scale: scale,
