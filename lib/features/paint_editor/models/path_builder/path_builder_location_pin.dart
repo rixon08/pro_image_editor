@@ -25,10 +25,10 @@ class PathBuilderLocationPin extends PathBuilderBase {
     // Build path (even though we don't use it, for consistency)
     build();
 
-    final center = start;
+    final tapPosition = start;
     // Use stroke width to determine icon size, with minimum size for visibility
     final baseSize = (item.strokeWidth > 0 ? item.strokeWidth : 8.0) * scale;
-    final iconSize = baseSize * 2.5;
+    final iconSize = baseSize * 5.0;
 
     // Get icon data
     final iconData = paintEditorConfigs.icons.locationPin;
@@ -50,7 +50,11 @@ class PathBuilderLocationPin extends PathBuilderBase {
     iconPainter.layout();
     
     // Draw icon at center position
-    final iconOffset = center - Offset(iconPainter.width / 2, iconPainter.height / 2);
+    // final iconOffset = center - Offset(iconPainter.width / 2, iconPainter.height / 2);
+    final iconOffset = Offset(
+      tapPosition.dx - iconPainter.width / 2,  // Center horizontally
+      tapPosition.dy - iconPainter.height,     // Bottom of icon at tap position
+    );
     iconPainter.paint(canvas, iconOffset);
   }
 

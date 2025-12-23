@@ -147,7 +147,8 @@ class PaintedModel {
     return mode == PaintMode.circle ||
         mode == PaintMode.rect ||
         mode == PaintMode.polygon ||
-        mode == PaintMode.locationPin;
+        mode == PaintMode.locationPin ||
+        mode == PaintMode.cloud;
   }
 
   /// Creates a copy of this PaintedModel instance.
