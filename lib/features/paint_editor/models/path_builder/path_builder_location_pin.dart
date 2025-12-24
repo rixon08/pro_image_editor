@@ -64,11 +64,21 @@ class PathBuilderLocationPin extends PathBuilderBase {
     
     final center = start;
     final baseSize = (item.strokeWidth > 0 ? item.strokeWidth : 8.0) * scale;
-    final iconSize = baseSize * 2.5;
-    final radius = iconSize / 2;
+    // Use the same icon size as in draw() method (baseSize * 5.0)
+    // Create a bounding box for easier clicking, especially when fill = false
+    final iconSize = baseSize * 5.0;
     
-    // Simple circular hit test
-    return (position - center).distance <= radius;
+    // Create a bounding box around the icon for easier hit testing
+    // Icon is drawn with bottom center at tap position
+    final iconRect = Rect.fromLTWH(
+      center.dx - iconSize / 2,  // Left: center horizontally
+      center.dy - iconSize,       // Top: icon height above tap position
+      iconSize,                   // Width: icon size
+      iconSize,                   // Height: icon size
+    );
+    
+    // Use bounding box for hit test (easier to click)
+    return iconRect.contains(position);
   }
 }
 

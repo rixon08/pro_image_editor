@@ -76,7 +76,21 @@ class PathBuilderCloud extends PathBuilderBase {
 
   @override
   bool hitTest(Offset position) {
-    return hitTestFillableObject(position);
+    // Always use bounding box for hit testing to make it easier to click
+    // especially when fill = false
+    build();
+    
+    // Get the bounding box of the path
+    final bounds = path.getBounds();
+    
+    // If fill is enabled, use path.contains for precise hit testing
+    if (item.fill) {
+      return path.contains(position);
+    }
+    
+    // When fill is false, still use bounding box for easier clicking
+    // instead of stroke-based hit test
+    return bounds.contains(position);
   }
 }
 

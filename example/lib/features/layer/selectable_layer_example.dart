@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 // Package imports:
 import 'package:pro_image_editor/pro_image_editor.dart';
+import 'package:pro_image_editor/shared/widgets/layer/interaction_helper/layer_interaction_button.dart';
 
 // Project imports:
 import '/core/constants/example_constants.dart';
@@ -62,6 +63,18 @@ class _SelectableLayerExampleState extends State<SelectableLayerExample>
       ),
       configs: ProImageEditorConfigs(
         designMode: platformDesignMode,
+        paintEditor: PaintEditorConfigs(
+          tools: [
+            PaintMode.moveAndZoom,
+            PaintMode.freeStyle,
+            PaintMode.arrow,
+            PaintMode.line,
+            PaintMode.rect,
+            PaintMode.circle,
+            PaintMode.cloud,
+            PaintMode.locationPin
+          ],
+        ),
         mainEditor: MainEditorConfigs(
           enableCloseButton: !isDesktopMode(context),
         ),
@@ -70,7 +83,7 @@ class _SelectableLayerExampleState extends State<SelectableLayerExample>
             processorMode: ProcessorMode.auto,
           ),
         ),
-        layerInteraction: const LayerInteractionConfigs(
+        layerInteraction: LayerInteractionConfigs(
           /// Choose between `auto`, `enabled` and `disabled`.
           ///
           /// Mode `auto`:
@@ -84,6 +97,71 @@ class _SelectableLayerExampleState extends State<SelectableLayerExample>
             remove: Icons.clear,
             edit: Icons.edit_outlined,
             rotateScale: Icons.sync,
+          ),
+          widgets: LayerInteractionWidgets(
+            children: [
+              // Tombol edit hanya muncul untuk text layer
+              (rebuildStream, layer, interactions) => ReactiveWidget(
+                stream: rebuildStream,
+                builder: (_) {
+                  // Hanya tampilkan edit button jika layer adalah text layer
+                  if (layer.isTextLayer && layer.interaction.enableEdit) {
+                    return Positioned(
+                      top: 0,
+                      right: 0,
+                      child: LayerInteractionButton(
+                        rotation: -layer.rotation,
+                        onTap: interactions.edit,
+                        buttonRadius: 10,
+                        cursor: SystemMouseCursors.click,
+                        icon: Icons.edit_outlined,
+                        tooltip: 'Edit',
+                        color: Colors.black,
+                        background: Colors.white,
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink(); // ignore: use_build_context_synchronously
+                },
+              ),
+              // Tombol remove untuk semua layer
+              (rebuildStream, layer, interactions) => ReactiveWidget(
+                stream: rebuildStream,
+                builder: (_) => Positioned(
+                  top: 0,
+                  left: 0,
+                  child: LayerInteractionButton(
+                    rotation: -layer.rotation,
+                    onTap: interactions.remove,
+                    buttonRadius: 10,
+                    cursor: SystemMouseCursors.click,
+                    icon: Icons.clear,
+                    tooltip: 'Remove',
+                    color: Colors.black,
+                    background: Colors.white,
+                  ),
+                ),
+              ),
+              // Tombol rotateScale untuk semua layer
+              (rebuildStream, layer, interactions) => ReactiveWidget(
+                stream: rebuildStream,
+                builder: (_) => Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: LayerInteractionButton(
+                    rotation: -layer.rotation,
+                    onScaleRotateDown: interactions.scaleRotateDown,
+                    onScaleRotateUp: interactions.scaleRotateUp,
+                    buttonRadius: 10,
+                    cursor: SystemMouseCursors.click,
+                    icon: Icons.sync,
+                    tooltip: 'Rotate and Scale',
+                    color: Colors.black,
+                    background: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
           style: LayerInteractionStyle(
             buttonRadius: 10,
