@@ -85,9 +85,6 @@ class RoundedBackgroundTextPainter extends CustomPainter {
     final double paddingVertical = firstLine.rawHeight * 0.1;
     final double radius = firstLine.innerRadius(innerRadius);
 
-    // Dapatkan width maksimal dari painter - ini sudah akurat termasuk composing text
-    final maxPainterWidth = painter.width;
-
     for (int index = 0; index < helpers.length; index++) {
       final info = helpers[index];
       if (info.isEmpty) continue;
@@ -121,14 +118,7 @@ class RoundedBackgroundTextPainter extends CustomPainter {
         firstMaximalWidth ??= info.endX + paddingHorizontal;
         endX = firstMaximalWidth;
       } else {
-        // Untuk baris terakhir, gunakan maxPainterWidth untuk memastikan
-        // background mencakup semua text termasuk composing text
-        if (hasNoLineAfter) {
-          // Gunakan width maksimal dari painter yang sudah akurat
-          endX = maxPainterWidth + paddingHorizontal;
-        } else {
-          endX = info.endX + paddingHorizontal;
-        }
+        endX = info.endX + paddingHorizontal;
       }
 
       final double startY = info.startY - paddingVertical;
