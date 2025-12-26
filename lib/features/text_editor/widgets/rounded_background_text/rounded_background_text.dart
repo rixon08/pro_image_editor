@@ -94,6 +94,9 @@ class RoundedBackgroundText extends StatelessWidget {
     return LayoutBuilder(builder: (context, constraints) {
       painter.layout(maxWidth: maxTextWidth);
 
+      final actualTextWidth = painter.width;
+      final actualTextHeight = painter.height;
+      
       return CustomPaint(
         isComplex: true,
         painter: RoundedBackgroundTextPainter(
@@ -106,8 +109,8 @@ class RoundedBackgroundText extends StatelessWidget {
           hitBoxCorrectionOffset: Offset(horizontalSpace, verticalSpace),
         ),
         size: Size(
-          painter.width.clamp(0, constraints.maxWidth) + horizontalSpace * 2,
-          painter.height.clamp(0, constraints.maxHeight) + verticalSpace * 2,
+          (actualTextWidth + horizontalSpace * 2).clamp(0, maxTextWidth + horizontalSpace * 2),
+          (actualTextHeight + verticalSpace * 2).clamp(0, constraints.maxHeight),
         ),
       );
     });
