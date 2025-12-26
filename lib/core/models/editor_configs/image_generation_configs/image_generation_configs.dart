@@ -36,6 +36,7 @@ class ImageGenerationConfigs {
     this.processorConfigs = const ProcessorConfigs(),
     this.maxOutputSize = const Size(2000, 2000),
     this.maxThumbnailSize = const Size(100, 100),
+    this.cropLayerPainterHeroTag,
   })  : assert(jpegQuality > 0 && jpegQuality <= 100,
             'jpegQuality must be between 1 and 100'),
         assert(
@@ -179,6 +180,15 @@ class ImageGenerationConfigs {
   /// compression ratio for chrominance components.
   final JpegChroma jpegChroma;
 
+  /// The hero tag for the crop layer painter widget.
+  ///
+  /// If not specified, it will use the main editor's heroTag with
+  /// '_crop_layer_painter' suffix.
+  ///
+  /// This is useful when using multiple editors in a PageView to avoid
+  /// duplicate hero tag conflicts.
+  final String? cropLayerPainterHeroTag;
+
   /// Creates a copy of this object with the given fields replaced with the new
   /// values.
   ///
@@ -203,6 +213,7 @@ class ImageGenerationConfigs {
     Size? maxOutputSize,
     Size? maxThumbnailSize,
     JpegChroma? jpegChroma,
+    String? cropLayerPainterHeroTag,
   }) {
     return ImageGenerationConfigs(
       cropToImageBounds: cropToImageBounds ?? this.cropToImageBounds,
@@ -226,6 +237,7 @@ class ImageGenerationConfigs {
       maxOutputSize: maxOutputSize ?? this.maxOutputSize,
       maxThumbnailSize: maxThumbnailSize ?? this.maxThumbnailSize,
       jpegChroma: jpegChroma ?? this.jpegChroma,
+      cropLayerPainterHeroTag: cropLayerPainterHeroTag ?? this.cropLayerPainterHeroTag,
     );
   }
 }

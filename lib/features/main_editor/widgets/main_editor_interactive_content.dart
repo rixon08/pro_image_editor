@@ -238,7 +238,8 @@ class MainEditorInteractiveContent extends StatelessWidget {
 
   Widget _buildCropAreaOverlay() {
     return Hero(
-      tag: 'crop_layer_painter_hero',
+      tag: configs.imageGeneration.cropLayerPainterHeroTag ?? 
+           '${configs.heroTag}_crop_layer_painter',
       child: StreamBuilder(
         stream: controllers.cropLayerPainterCtrl.stream,
         builder: (context, snapshot) {

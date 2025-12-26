@@ -114,7 +114,8 @@ class LayerStack extends StatelessWidget {
           if (configs.imageGeneration.cropToImageBounds)
             RepaintBoundary(
               child: Hero(
-                tag: 'crop_layer_painter_hero',
+                tag: configs.imageGeneration.cropLayerPainterHeroTag ?? 
+                     '${configs.heroTag}_crop_layer_painter',
                 child: CustomPaint(
                   foregroundPainter:
                       _cutOutsideImageArea ? _buildCropPainter() : null,
