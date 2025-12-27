@@ -1639,15 +1639,17 @@ class ProImageEditorState extends State<ProImageEditor>
     Duration duration = const Duration(milliseconds: 150),
   }) async {
     TextLayer? layer = await openPage(
-      TextEditor(
-        key: textEditor,
-        configs: configs,
-        theme: _theme,
-        callbacks: callbacks,
-        scaleFactor: textEditorConfigs.enableMainEditorZoomFactor
-            ? interactiveViewer.currentState?.scaleFactor ?? 1.0
-            : 1.0,
-        imageSize: sizesManager.decodedImageSize,
+      MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)), 
+        child: TextEditor(
+          key: textEditor,
+          configs: configs,
+          theme: _theme,
+          callbacks: callbacks,
+          scaleFactor: textEditorConfigs.enableMainEditorZoomFactor
+              ? interactiveViewer.currentState?.scaleFactor ?? 1.0
+              : 1.0,
+          imageSize: sizesManager.decodedImageSize,
+        )
       ),
       duration: duration,
     );

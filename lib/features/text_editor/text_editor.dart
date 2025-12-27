@@ -340,7 +340,7 @@ class TextEditorState extends State<TextEditor>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return ExtendedPopScope(
+        return MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)), child: ExtendedPopScope(
           canPop: textEditorConfigs.enableGesturePop,
           child: Theme(
             data: widget.theme.copyWith(
@@ -358,7 +358,7 @@ class TextEditorState extends State<TextEditor>
                 bottomNavigationBar: _buildBottomBar(),
               ),
             ),
-          ),
+          )),
         );
       },
     );
