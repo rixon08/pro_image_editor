@@ -2145,7 +2145,7 @@ class CropRotateEditorState extends State<CropRotateEditor>
                     child: SizedBox(
                       width: constraints.maxWidth *
                           (cropRotateEditorConfigs.maxWidthFactor ??
-                              (!kIsWeb && Platform.isAndroid ? 0.9 : 1)),
+                              (!kIsWeb && Platform.isAndroid ? 1 : 1)),
                       child: _buildBody(),
                     ),
                   ),
