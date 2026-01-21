@@ -79,11 +79,14 @@ class ImageRenderService {
         useThumbnailSize,
       );
 
+      debugPrint('isOutputSizeTooLarge: $isOutputSizeTooLarge');
+
       if (isOutputSizeTooLarge) {
         outputRatio = max(
           _maxOutputDimension(useThumbnailSize).width / boundary.size.width,
           _maxOutputDimension(useThumbnailSize).height / boundary.size.height,
         );
+        debugPrint('outputRatio: $outputRatio');
       }
 
       double pixelRatio = configs.customPixelRatio ?? outputRatio;
@@ -118,7 +121,8 @@ class ImageRenderService {
     bool useThumbnailSize,
   ) {
     Size outputSize = renderedSize * outputRatio;
-
+    debugPrint('outputSize width: ${outputSize.width}, height: ${outputSize.height}');
+    debugPrint('maxOutputDimension width: ${_maxOutputDimension(useThumbnailSize).width}, height: ${_maxOutputDimension(useThumbnailSize).height}');
     return outputSize.width > _maxOutputDimension(useThumbnailSize).width ||
         outputSize.height > _maxOutputDimension(useThumbnailSize).height;
   }
