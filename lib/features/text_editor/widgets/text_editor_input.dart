@@ -136,24 +136,32 @@ class _TextEditorInputState extends State<TextEditorInput> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    // Adjust padding when keyboard is visible in landscape mode
+    final bottomPadding = isLandscape && keyboardHeight > 0 
+        ? keyboardHeight * 0.2 
+        : 0.0;
     return Align(
       alignment: widget.configs.inputTextFieldAlign,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: widget.configs.style.textFieldMargin,
-        child: IntrinsicWidth(
-          child: SingleChildScrollView(
-            clipBehavior: Clip.none,
-            padding: widget.configs.enableAutoOverflow
-                ? null
-                : const EdgeInsets.symmetric(horizontal: 16.0),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: widget.maxWidth),
-              child: _buildInputField(),
+      child: Padding(padding: EdgeInsets.only(bottom: bottomPadding), 
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: widget.configs.style.textFieldMargin,
+          child: IntrinsicWidth(
+            child: SingleChildScrollView(
+              clipBehavior: Clip.none,
+              padding: widget.configs.enableAutoOverflow
+                  ? null
+                  : const EdgeInsets.symmetric(horizontal: 16.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: widget.maxWidth),
+                child: _buildInputField(),
+              ),
             ),
           ),
         ),
-      ),
+      )
     );
   }
 
