@@ -144,7 +144,10 @@ class _TextEditorInputState extends State<TextEditorInput> {
         : 0.0;
     return Align(
       alignment: widget.configs.inputTextFieldAlign,
-      child: Padding(padding: EdgeInsets.only(bottom: bottomPadding), 
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: bottomPadding),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: widget.configs.style.textFieldMargin,
