@@ -407,11 +407,12 @@ class TextEditorState extends State<TextEditor>
     return LayoutBuilder(builder: (_, constraints) {
       editorBodySize = constraints.biggest;
       final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+      final paddingBottom = keyboardHeight > 0 ? keyboardHeight * 0.3 : 0.0;
 
       return GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: textEditorConfigs.enableTapOutsideToSave ? done : null,
-        child: Padding(padding: EdgeInsets.only(bottom: keyboardHeight), 
+        child: Padding(padding: EdgeInsets.only(bottom: paddingBottom), 
           child: Stack(
             children: [
               if (textEditorConfigs.widgets.bodyItems != null)
