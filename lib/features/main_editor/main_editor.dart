@@ -1435,6 +1435,7 @@ class ProImageEditorState extends State<ProImageEditor>
   Future<T?> openPage<T>(
     Widget page, {
     Duration duration = const Duration(milliseconds: 300),
+    bool isUsingPaddingBottomForKeyboard = false,
   }) {
     layerInteractionManager.clearSelectedLayers();
     _checkInteractiveViewer();
@@ -1512,6 +1513,16 @@ class ProImageEditorState extends State<ProImageEditor>
           }
 
           animation.addStatusListener(animationStatusListener);
+          if (isUsingPaddingBottomForKeyboard) {
+            final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+            final paddingBottom = keyboardHeight > 0 ? keyboardHeight * 0.7 : 0.0;
+            // print('keyboardHeight openPage: $keyboardHeight');
+            // print('paddingBottom openPage: $paddingBottom');
+
+            // print('!subEditorStyle.requireReposition: ${!subEditorStyle.requireReposition}');
+
+            if (!subEditorStyle.requireReposition) return Padding(padding: EdgeInsets.only(bottom: paddingBottom), child: page);
+          }
 
           if (!subEditorStyle.requireReposition) return page;
 
@@ -1639,6 +1650,7 @@ class ProImageEditorState extends State<ProImageEditor>
     Duration duration = const Duration(milliseconds: 150),
   }) async {
     TextLayer? layer = await openPage(
+      isUsingPaddingBottomForKeyboard: true,
       MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)), 
         child: TextEditor(
           key: textEditor,
