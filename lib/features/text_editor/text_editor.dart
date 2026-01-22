@@ -353,6 +353,7 @@ class TextEditorState extends State<TextEditor>
               right: textEditorConfigs.safeArea.right,
               child: Scaffold(
                 backgroundColor: textEditorConfigs.style.background,
+                resizeToAvoidBottomInset: true,
                 appBar: _buildAppBar(constraints),
                 body: _buildBody(),
                 bottomNavigationBar: _buildBottomBar(),
@@ -405,33 +406,36 @@ class TextEditorState extends State<TextEditor>
   Widget _buildBody() {
     return LayoutBuilder(builder: (_, constraints) {
       editorBodySize = constraints.biggest;
+      final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
       return GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: textEditorConfigs.enableTapOutsideToSave ? done : null,
-        child: Stack(
-          children: [
-            if (textEditorConfigs.widgets.bodyItems != null)
-              ...textEditorConfigs.widgets.bodyItems!(
-                this,
-                _rebuildController.stream,
-              ),
-            _buildTextField(),
-            _buildColorPicker(),
-            if (textEditorConfigs.showSelectFontStyleBottomBar)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: kBottomNavigationBarHeight,
-                child: TextEditorBottomBar(
-                  configs: widget.configs,
-                  selectedStyle: selectedTextStyle,
-                  onFontChange: setTextStyle,
+        child: Padding(padding: EdgeInsets.only(bottom: keyboardHeight), 
+          child: Stack(
+            children: [
+              if (textEditorConfigs.widgets.bodyItems != null)
+                ...textEditorConfigs.widgets.bodyItems!(
+                  this,
+                  _rebuildController.stream,
                 ),
-              ),
-          ],
-        ),
+              _buildTextField(),
+              _buildColorPicker(),
+              if (textEditorConfigs.showSelectFontStyleBottomBar)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: kBottomNavigationBarHeight,
+                  child: TextEditorBottomBar(
+                    configs: widget.configs,
+                    selectedStyle: selectedTextStyle,
+                    onFontChange: setTextStyle,
+                  ),
+                ),
+            ],
+          ),
+        )
       );
     });
   }
