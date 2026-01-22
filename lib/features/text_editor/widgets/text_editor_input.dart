@@ -142,6 +142,7 @@ class _TextEditorInputState extends State<TextEditorInput> {
     final bottomPadding = isLandscape && keyboardHeight > 0 
         ? keyboardHeight * 0.2 
         : 0.0;
+    print('bottomPadding: $bottomPadding');
     return Align(
       alignment: widget.configs.inputTextFieldAlign,
       child: AnimatedPadding(
