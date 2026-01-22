@@ -404,11 +404,11 @@ class TextEditorState extends State<TextEditor>
 
   /// Builds the body of the text editor.
   Widget _buildBody() {
-    return LayoutBuilder(builder: (_, constraints) {
+    return LayoutBuilder(builder: (ctx, constraints) {
       editorBodySize = constraints.biggest;
-      final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+      final keyboardHeight = MediaQuery.of(ctx).viewInsets.bottom;
       final paddingBottom = keyboardHeight > 0 ? keyboardHeight * 0.3 : 0.0;
-
+      print('paddingBottom _buildBody: $paddingBottom');
       return GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: textEditorConfigs.enableTapOutsideToSave ? done : null,
