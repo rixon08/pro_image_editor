@@ -88,6 +88,7 @@ class ImageRenderService {
 
       double pixelRatio = configs.customPixelRatio ?? outputRatio;
 
+      debugPrint('imageInfos: ${imageInfos.rawSize.width}x${imageInfos.rawSize.height}');
       // Capture image
       ui.Image image = await _convertToDartUiImage(
         boundary,

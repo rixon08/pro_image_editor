@@ -935,6 +935,7 @@ class ProImageEditorState extends State<ProImageEditor>
     TransformConfigs? transformConfigs,
     ImageInfos? imageInfos,
   ]) async {
+    print('decodeImage');
     if (widget.blankSize != null) {
       final blankSize = widget.blankSize!;
       imageInfos ??= ImageInfos(
@@ -2145,6 +2146,7 @@ class ProImageEditorState extends State<ProImageEditor>
       );
 
       if (callbacks.onThumbnailGenerated != null) {
+        print('onThumbnailGenerated');
         if (_imageInfos == null) await decodeImage();
 
         final results = await Future.wait([
@@ -2160,6 +2162,7 @@ class ProImageEditorState extends State<ProImageEditor>
           results[1] as ui.Image,
         );
       } else {
+        print('captureEditorImage');
         Uint8List? bytes = await captureEditorImage();
         await onImageEditingComplete?.call(bytes);
 
@@ -2219,7 +2222,7 @@ class ProImageEditorState extends State<ProImageEditor>
       if (!_pageOpenCompleter.isCompleted) await _pageOpenCompleter.future;
       if (!mounted) return Uint8List.fromList([]);
     }
-
+  
     if (_imageInfos == null) await decodeImage();
 
     if (!mounted) return Uint8List.fromList([]);

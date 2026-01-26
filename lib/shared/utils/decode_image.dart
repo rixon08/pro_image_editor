@@ -11,6 +11,7 @@ Future<ImageInfos> decodeImageInfos({
   required Size screenSize,
   TransformConfigs? configs,
 }) async {
+  print('decodeImageInfos');
   var decodedImage = await decodeImageFromList(bytes);
   Size rawSize = Size(
     decodedImage.width.toDouble(),
@@ -20,6 +21,8 @@ Future<ImageInfos> decodeImageInfos({
   bool rotated = configs?.is90DegRotated == true;
   int width = decodedImage.width;
   int height = decodedImage.height;
+
+  print('decodeImageInfos rawSize: ${width}x${height}');
 
   double calculatePixelRatio(num width, num height) {
     bool fitToHeight = screenSize.aspectRatio > (width / height);
