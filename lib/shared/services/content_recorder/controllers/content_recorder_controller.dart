@@ -285,10 +285,12 @@ class ContentRecorderController {
       if (originalImageBytes == null) {
         if (isGenerationActive) {
           // Await the image data from the thread.
+          print('isGenerationActive true');
           bytes = await backgroundScreenshot.completer.future;
         } else {
           // Capture a new screenshot if the current screenshot is broken or
           // didn't exists.
+          print('isGenerationActive false');
           bytes = widget == null
               ? await _captureImageContent(
                   id: id,
