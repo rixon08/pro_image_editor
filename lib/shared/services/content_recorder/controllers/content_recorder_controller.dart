@@ -304,6 +304,8 @@ class ContentRecorderController {
       } else {
         // If the user didn't change anything just ensure the output-format
         // is correct.
+        print('convertImageFormat');
+        print('targetSize : ${targetSize?.width}x${targetSize?.height}');
         bytes = await convertImageFormat(
           imageInfos: imageInfos,
           imageBytes: originalImageBytes,
@@ -328,6 +330,10 @@ class ContentRecorderController {
               targetSize: targetSize,
               imageInfos: imageInfos,
             );
+    }
+    if (bytes != null) {
+      final ui.Image image = await decodeImageFromList(bytes);
+      print('image : ${image.width}x${image.height}');
     }
     return bytes;
   }
