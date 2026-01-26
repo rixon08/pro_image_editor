@@ -2232,7 +2232,8 @@ class ProImageEditorState extends State<ProImageEditor>
     if (!hasChanges && !imageGenerationConfigs.enableUseOriginalBytes) {
       addHistory();
     }
-
+    print('useOriginalImage: $useOriginalImage');
+    print('_imageInfos: ${_imageInfos?.rawSize.width}x${_imageInfos?.rawSize.height}');
     return await _controllers.screenshot.captureFinalScreenshot(
           imageInfos: _imageInfos!,
           backgroundScreenshot:
