@@ -1,3 +1,6 @@
+// Dart imports:
+import 'dart:ui' show Offset;
+
 // Flutter imports:
 import 'package:flutter/widgets.dart';
 
@@ -10,7 +13,9 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
   /// Creates a new instance of [PaintEditorCallbacks].
   const PaintEditorCallbacks({
     this.onPaintModeChanged,
+    this.onDrawingStart,
     this.onDrawingDone,
+    this.onDrawingUpdate,
     this.onColorChanged,
     this.onLineWidthChanged,
     this.onToggleFill,
@@ -51,8 +56,19 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
   /// The [ValueChanged<double>] parameter provides the new opacity level.
   final ValueChanged<double>? onOpacityChange;
 
+  /// A callback function that is triggered when the user starts drawing
+  /// (pointer down on canvas and begins a stroke).
+  final Function()? onDrawingStart;
+
   /// A callback function that is triggered when drawing is done.
   final Function()? onDrawingDone;
+
+  /// A callback function that is triggered while the user is drawing.
+  ///
+  /// The [ValueChanged<Offset?>] parameter provides the current local
+  /// position of the pointer during the stroke. May be called many times
+  /// per stroke.
+  final ValueChanged<Offset?>? onDrawingUpdate;
 
   /// A callback function that is triggered when the color is changed.
   final Function()? onColorChanged;
@@ -228,6 +244,24 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
     handleUpdateUI();
   }
 
+  /// Handles the drawing start event.
+  ///
+  /// This method calls the [onDrawingStart] callback and then calls
+  /// [handleUpdateUI].
+  void handleDrawingStart() {
+    onDrawingStart?.call();
+    // handleUpdateUI();
+  }
+
+  /// Handles the drawing update event.
+  ///
+  /// This method calls the [onDrawingUpdate] callback with the current
+  /// [position] and then calls [handleUpdateUI].
+  void handleDrawingUpdate(Offset? position) {
+    onDrawingUpdate?.call(position);
+    // handleUpdateUI();
+  }
+
   /// Handles the drawing done event.
   ///
   /// This method calls the [onDrawingDone] callback and then calls
@@ -279,7 +313,9 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
     ValueChanged<PaintMode>? onPaintModeChanged,
     ValueChanged<bool>? onToggleFill,
     ValueChanged<double>? onOpacityChange,
+    Function()? onDrawingStart,
     Function()? onDrawingDone,
+    ValueChanged<Offset?>? onDrawingUpdate,
     Function()? onColorChanged,
     GestureScaleEndCallback? onEditorZoomScaleEnd,
     GestureScaleStartCallback? onEditorZoomScaleStart,
@@ -301,7 +337,9 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
       onPaintModeChanged: onPaintModeChanged ?? this.onPaintModeChanged,
       onToggleFill: onToggleFill ?? this.onToggleFill,
       onOpacityChange: onOpacityChange ?? this.onOpacityChange,
+      onDrawingStart: onDrawingStart ?? this.onDrawingStart,
       onDrawingDone: onDrawingDone ?? this.onDrawingDone,
+      onDrawingUpdate: onDrawingUpdate ?? this.onDrawingUpdate,
       onColorChanged: onColorChanged ?? this.onColorChanged,
       onEditorZoomScaleEnd: onEditorZoomScaleEnd ?? this.onEditorZoomScaleEnd,
       onEditorZoomScaleStart:

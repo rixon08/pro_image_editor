@@ -1106,6 +1106,10 @@ class PaintEditorState extends State<PaintEditor>
       eraserRadius: eraserRadius,
       onTap: (details) =>
           callbacks.paintEditorCallbacks?.onTap?.call(this, details),
+      onDrawingStart: () =>
+          callbacks.paintEditorCallbacks?.handleDrawingStart(),
+      onDrawingUpdate: (offset) =>
+          callbacks.paintEditorCallbacks?.handleDrawingUpdate(offset),
       onRemoveLayer: (removeIdList) {
         final removeIdSet = removeIdList.toSet();
         final updatedList = <Layer>[];

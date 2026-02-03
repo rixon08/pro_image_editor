@@ -32,6 +32,8 @@ class PaintCanvas extends StatefulWidget {
     required this.onRemovePartialStart,
     required this.onRemovePartialEnd,
     required this.onTap,
+    this.onDrawingStart,
+    this.onDrawingUpdate,
     required this.drawAreaSize,
     required this.editorBodySize,
     required this.paintCtrl,
@@ -66,6 +68,14 @@ class PaintCanvas extends StatefulWidget {
   /// characteristics of the tap event. This callback can be used to handle
   /// custom tap interactions within the paint editor.
   final Function(TapDownDetails details) onTap;
+
+  /// Callback triggered when the user starts drawing (pointer down and begins
+  /// a stroke).
+  final VoidCallback? onDrawingStart;
+
+  /// Callback triggered while the user is drawing. Provides the current
+  /// local position of the pointer. May be called many times per stroke.
+  final ValueChanged<Offset?>? onDrawingUpdate;
 
   /// Callback to refresh the current state or view.
   final VoidCallback onRefresh;
@@ -148,6 +158,7 @@ class PaintCanvasState extends State<PaintCanvas> {
         return;
       case PaintMode.eraser:
         _hasPartialErasedAreas = false;
+        widget.onDrawingStart?.call();
         widget.onRemovePartialStart();
         setState(() {});
         return;
@@ -155,6 +166,7 @@ class PaintCanvasState extends State<PaintCanvas> {
         _addPolygonPoint(offset);
         return;
       default:
+        widget.onDrawingStart?.call();
         _paintCtrl
           ..setStart(offset)
           ..addOffsets(offset);
@@ -177,10 +189,12 @@ class PaintCanvasState extends State<PaintCanvas> {
       case PaintMode.polygon:
         return;
       case PaintMode.eraser:
+        widget.onDrawingUpdate?.call(details.localFocalPoint);
         _processEraserInput(details);
         break;
       default:
         final offset = details.localFocalPoint;
+        widget.onDrawingUpdate?.call(offset);
         if (!_paintCtrl.busy) {
           widget.onRefresh();
           _paintCtrl.setInProgress(true);
