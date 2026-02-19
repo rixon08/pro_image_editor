@@ -68,15 +68,19 @@ class CropRotateEditorStyle {
     this.cropOverlayOpacity = 0.7,
     this.cropOverlayInteractionOpacity = 0.25,
     this.uiOverlayStyle = kImageEditorUiOverlayStyle,
-  })  : assert(cropOverlayOpacity >= 0.0 && cropOverlayOpacity <= 1.0,
-            'cropOverlayOpacity must be between 0.0 and 1.0'),
-        assert(cropOverlayInteractionOpacity >= 0.0,
-            'cropOverlayInteractionOpacity must be non-negative'),
-        assert(
-          cropOverlayInteractionOpacity <= cropOverlayOpacity,
-          'cropOverlayInteractionOpacity must not be greater than '
-          'cropOverlayOpacity',
-        );
+  }) : assert(
+         cropOverlayOpacity >= 0.0 && cropOverlayOpacity <= 1.0,
+         'cropOverlayOpacity must be between 0.0 and 1.0',
+       ),
+       assert(
+         cropOverlayInteractionOpacity >= 0.0,
+         'cropOverlayInteractionOpacity must be non-negative',
+       ),
+       assert(
+         cropOverlayInteractionOpacity <= cropOverlayOpacity,
+         'cropOverlayInteractionOpacity must not be greater than '
+         'cropOverlayOpacity',
+       );
 
   /// Background color of the app bar in the crop and rotate editor.
   final Color appBarBackground;
@@ -166,9 +170,11 @@ class CropRotateEditorStyle {
       appBarColor: appBarColor ?? this.appBarColor,
       bottomBarBackground: bottomBarBackground ?? this.bottomBarBackground,
       bottomBarColor: bottomBarColor ?? this.bottomBarColor,
-      aspectRatioSheetBackgroundColor: aspectRatioSheetBackgroundColor ??
+      aspectRatioSheetBackgroundColor:
+          aspectRatioSheetBackgroundColor ??
           this.aspectRatioSheetBackgroundColor,
-      aspectRatioSheetForegroundColor: aspectRatioSheetForegroundColor ??
+      aspectRatioSheetForegroundColor:
+          aspectRatioSheetForegroundColor ??
           this.aspectRatioSheetForegroundColor,
       background: background ?? this.background,
       cropCornerColor: cropCornerColor ?? this.cropCornerColor,
