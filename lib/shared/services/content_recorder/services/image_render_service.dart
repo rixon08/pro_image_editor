@@ -68,25 +68,54 @@ class ImageRenderService {
 
       // Determine pixel ratio
       double outputRatio = imageInfos.pixelRatio;
-      if (!configs.cropToDrawingBounds && context != null && context.mounted) {
-        outputRatio =
-            max(imageInfos.pixelRatio, MediaQuery.devicePixelRatioOf(context));
-      }
+      double pixelRatio;
 
-      bool isOutputSizeTooLarge = checkOutputSizeIsTooLarge(
-        imageInfos.renderedSize,
-        outputRatio,
-        useThumbnailSize,
-      );
-
-      if (isOutputSizeTooLarge) {
-        outputRatio = max(
-          _maxOutputDimension(useThumbnailSize).width / boundary.size.width,
-          _maxOutputDimension(useThumbnailSize).height / boundary.size.height,
+      if (configs.preserveOriginalResolution) {
+        // Output must match original image size, capped by maxOutputSize
+        Size maxDim = _maxOutputDimension(useThumbnailSize);
+        double scale = min(
+          1.0,
+          min(
+            maxDim.width / imageInfos.rawSize.width,
+            maxDim.height / imageInfos.rawSize.height,
+          ),
         );
-      }
+        Size targetOutputSize = Size(
+          imageInfos.rawSize.width * scale,
+          imageInfos.rawSize.height * scale,
+        );
+        Size captureSize = _getCaptureLogicalSize(boundary, imageInfos);
+        if (captureSize.width > 0 && captureSize.height > 0) {
+          pixelRatio = targetOutputSize.width / captureSize.width;
+          // Use same ratio for both dimensions (aspect ratio preserved)
+          final ratioH = targetOutputSize.height / captureSize.height;
+          if (ratioH < pixelRatio) pixelRatio = ratioH;
+        } else {
+          pixelRatio = outputRatio;
+        }
+      } else {
+        if (!configs.cropToDrawingBounds &&
+            context != null &&
+            context.mounted) {
+          outputRatio = max(imageInfos.pixelRatio,
+              MediaQuery.devicePixelRatioOf(context));
+        }
 
-      double pixelRatio = configs.customPixelRatio ?? outputRatio;
+        bool isOutputSizeTooLarge = checkOutputSizeIsTooLarge(
+          imageInfos.renderedSize,
+          outputRatio,
+          useThumbnailSize,
+        );
+
+        if (isOutputSizeTooLarge) {
+          outputRatio = max(
+            _maxOutputDimension(useThumbnailSize).width / boundary.size.width,
+            _maxOutputDimension(useThumbnailSize).height / boundary.size.height,
+          );
+        }
+
+        pixelRatio = configs.customPixelRatio ?? outputRatio;
+      }
 
       // Capture image
       ui.Image image = await _convertToDartUiImage(
@@ -132,6 +161,37 @@ class ImageRenderService {
   /// Returns the maximum allowable `Size` for the output.
   Size _maxOutputDimension(bool useThumbnailSize) =>
       !useThumbnailSize ? configs.maxOutputSize : configs.maxThumbnailSize;
+
+  /// Returns the logical size of the area that will be captured (crop rect when
+  /// [cropToImageBounds] is true, otherwise full boundary size).
+  Size _getCaptureLogicalSize(
+    ExtendedRenderRepaintBoundary boundary,
+    ImageInfos imageInfos,
+  ) {
+    if (!configs.cropToImageBounds) {
+      return boundary.size;
+    }
+    double imageWidth = boundary.size.width;
+    double imageHeight = boundary.size.height;
+    double cropRectRatio = !imageInfos.isRotated
+        ? imageInfos.cropRectSize.aspectRatio
+        : 1 / imageInfos.cropRectSize.aspectRatio;
+    Size convertedImgSize = Size(imageWidth, imageHeight);
+    double convertedImgWidth = convertedImgSize.width;
+    double convertedImgHeight = convertedImgSize.height;
+    if (convertedImgSize.aspectRatio > cropRectRatio) {
+      convertedImgSize = Size(
+        convertedImgHeight * cropRectRatio,
+        convertedImgHeight,
+      );
+    } else {
+      convertedImgSize = Size(
+        convertedImgWidth,
+        convertedImgWidth / cropRectRatio,
+      );
+    }
+    return convertedImgSize;
+  }
 
   /// Crops an image to remove transparent areas, focusing on the bounds of the
   /// visible content.

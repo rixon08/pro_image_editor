@@ -21,6 +21,7 @@ class ImageGenerationConfigs {
   const ImageGenerationConfigs({
     this.cropToImageBounds = true,
     this.cropToDrawingBounds = true,
+    this.preserveOriginalResolution = false,
     this.allowEmptyEditingCompletion = true,
     this.enableIsolateGeneration = true,
     this.enableBackgroundGeneration = !kIsWeb || !kDebugMode,
@@ -77,6 +78,14 @@ class ImageGenerationConfigs {
   ///
   /// **Default:** `true`
   final bool cropToDrawingBounds;
+
+  /// When `true`, the exported image resolution will match the original image
+  /// dimensions (or fit within [maxOutputSize] while preserving aspect ratio).
+  /// This prevents the output from exceeding the source image resolution or
+  /// being boosted by device pixel ratio.
+  ///
+  /// **Default:** `false`
+  final bool preserveOriginalResolution;
 
   /// Captures the image after each modification, such as adding a layer.
   /// This improves editor performance by ensuring the image is pre-generated
@@ -198,6 +207,7 @@ class ImageGenerationConfigs {
   ImageGenerationConfigs copyWith({
     bool? cropToImageBounds,
     bool? cropToDrawingBounds,
+    bool? preserveOriginalResolution,
     bool? enableBackgroundGeneration,
     bool? enableIsolateGeneration,
     bool? allowEmptyEditingCompletion,
@@ -218,6 +228,8 @@ class ImageGenerationConfigs {
     return ImageGenerationConfigs(
       cropToImageBounds: cropToImageBounds ?? this.cropToImageBounds,
       cropToDrawingBounds: cropToDrawingBounds ?? this.cropToDrawingBounds,
+      preserveOriginalResolution:
+          preserveOriginalResolution ?? this.preserveOriginalResolution,
       enableBackgroundGeneration:
           enableBackgroundGeneration ?? this.enableBackgroundGeneration,
       enableIsolateGeneration:
