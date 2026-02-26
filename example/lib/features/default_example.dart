@@ -36,6 +36,11 @@ class _DefaultExampleState extends State<DefaultExample>
     with ExampleHelperState<DefaultExample> {
   late final _configs = ProImageEditorConfigs(
     designMode: platformDesignMode,
+    imageGeneration: const ImageGenerationConfigs(
+      enableMaxSizeOutputSameOriginal: true,
+      jpegQuality: 85,
+      // maxOutputSize: Size(1000, 1000),
+    ),
   );
   late final _callbacks = ProImageEditorCallbacks(
     onImageEditingStarted: onImageEditingStarted,
