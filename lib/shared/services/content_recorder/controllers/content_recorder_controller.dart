@@ -366,6 +366,7 @@ class ContentRecorderController {
       imageInfos.renderedSize,
       outputRatio,
       enableThumbnailGeneration,
+      imageInfos: imageInfos,
     );
     if (!isFormatSame || isOutputSizeTooLarge) {
       final ui.Image image = await decodeImageFromList(bytes);

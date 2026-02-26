@@ -35,6 +35,7 @@ class ImageGenerationConfigs {
     this.outputFormat = OutputFormat.jpg,
     this.processorConfigs = const ProcessorConfigs(),
     this.maxOutputSize = const Size(2000, 2000),
+    this.enableMaxSizeOutputSameOriginal = false,
     this.maxThumbnailSize = const Size(100, 100),
     this.cropLayerPainterHeroTag,
   })  : assert(jpegQuality > 0 && jpegQuality <= 100,
@@ -165,6 +166,13 @@ class ImageGenerationConfigs {
   /// `BoxFit.contain`.
   final Size maxOutputSize;
 
+  /// When `true`, the effective maximum output size is the original image size,
+  /// so the output will not exceed the source dimensions. When `false`, the
+  /// limit is given by [maxOutputSize].
+  ///
+  /// **Default:** `false`
+  final bool enableMaxSizeOutputSameOriginal;
+
   /// The maximum output size for the thumbnail image. It will maintain the
   /// image's aspect ratio but will fit within the specified constraints,
   /// similar to `BoxFit.contain`.
@@ -211,6 +219,7 @@ class ImageGenerationConfigs {
     int? jpegQuality,
     Color? jpegBackgroundColor,
     Size? maxOutputSize,
+    bool? enableMaxSizeOutputSameOriginal,
     Size? maxThumbnailSize,
     JpegChroma? jpegChroma,
     String? cropLayerPainterHeroTag,
@@ -235,6 +244,7 @@ class ImageGenerationConfigs {
       jpegQuality: jpegQuality ?? this.jpegQuality,
       jpegBackgroundColor: jpegBackgroundColor ?? this.jpegBackgroundColor,
       maxOutputSize: maxOutputSize ?? this.maxOutputSize,
+      enableMaxSizeOutputSameOriginal: enableMaxSizeOutputSameOriginal ?? this.enableMaxSizeOutputSameOriginal,
       maxThumbnailSize: maxThumbnailSize ?? this.maxThumbnailSize,
       jpegChroma: jpegChroma ?? this.jpegChroma,
       cropLayerPainterHeroTag: cropLayerPainterHeroTag ?? this.cropLayerPainterHeroTag,

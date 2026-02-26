@@ -77,12 +77,14 @@ class ImageRenderService {
         imageInfos.renderedSize,
         outputRatio,
         useThumbnailSize,
+        imageInfos: imageInfos,
       );
 
       if (isOutputSizeTooLarge) {
+        Size maxDim = _maxOutputDimension(useThumbnailSize, imageInfos);
         outputRatio = max(
-          _maxOutputDimension(useThumbnailSize).width / boundary.size.width,
-          _maxOutputDimension(useThumbnailSize).height / boundary.size.height,
+          maxDim.width / boundary.size.width,
+          maxDim.height / boundary.size.height,
         );
       }
 
@@ -109,29 +111,41 @@ class ImageRenderService {
   /// - [outputRatio]: The pixel ratio applied to the rendered content.
   /// - [useThumbnailSize]: Determines if thumbnail size constraints are
   /// applied.
+  /// - [imageInfos]: Optional image info; when [configs.enableMaxSizeOutputSameOriginal]
+  ///   is true, used to cap the max dimension to the original image size.
   ///
   /// Returns `true` if the output size exceeds the allowed dimensions,
   /// otherwise `false`.
   bool checkOutputSizeIsTooLarge(
     Size renderedSize,
     double outputRatio,
-    bool useThumbnailSize,
-  ) {
+    bool useThumbnailSize, {
+    ImageInfos? imageInfos,
+  }) {
     Size outputSize = renderedSize * outputRatio;
+    Size maxDim = _maxOutputDimension(useThumbnailSize, imageInfos);
 
-    return outputSize.width > _maxOutputDimension(useThumbnailSize).width ||
-        outputSize.height > _maxOutputDimension(useThumbnailSize).height;
+    return outputSize.width > maxDim.width ||
+        outputSize.height > maxDim.height;
   }
 
   /// Calculates the maximum output dimensions based on whether thumbnail
-  /// constraints are applied.
+  /// constraints are applied and [configs.enableMaxSizeOutputSameOriginal].
   ///
   /// - [useThumbnailSize]: If `true`, uses the maximum thumbnail size;
   /// otherwise, uses the full output size.
+  /// - [imageInfos]: When [configs.enableMaxSizeOutputSameOriginal] is true and not
+  ///   using thumbnail size, the limit is the original image size
+  ///   ([ImageInfos.rawSize]).
   ///
   /// Returns the maximum allowable `Size` for the output.
-  Size _maxOutputDimension(bool useThumbnailSize) =>
-      !useThumbnailSize ? configs.maxOutputSize : configs.maxThumbnailSize;
+  Size _maxOutputDimension(bool useThumbnailSize, [ImageInfos? imageInfos]) {
+    if (useThumbnailSize) return configs.maxThumbnailSize;
+    if (configs.enableMaxSizeOutputSameOriginal && imageInfos != null) {
+      return imageInfos.rawSize;
+    }
+    return configs.maxOutputSize;
+  }
 
   /// Crops an image to remove transparent areas, focusing on the bounds of the
   /// visible content.
