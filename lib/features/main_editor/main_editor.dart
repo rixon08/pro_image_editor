@@ -630,7 +630,8 @@ class ProImageEditorState extends State<ProImageEditor>
 
   @override
   void setState(void Function() fn) {
-    if (mounted && !_rebuildController.isClosed) {
+    if (!mounted) return;
+    if (!_rebuildController.isClosed) {
       _rebuildController.add(null);
     }
     super.setState(fn);
@@ -1488,18 +1489,20 @@ class ProImageEditorState extends State<ProImageEditor>
                 }
                 break;
               case AnimationStatus.dismissed:
-                setState(() {
-                  isSubEditorOpen = false;
-                  isSubEditorClosing = false;
-                  if (!_pageOpenCompleter.isCompleted) {
-                    _pageOpenCompleter.complete(true);
-                  }
+                if (!_pageOpenCompleter.isCompleted) {
+                  _pageOpenCompleter.complete(true);
+                }
+                if (mounted) {
+                  setState(() {
+                    isSubEditorOpen = false;
+                    isSubEditorClosing = false;
 
-                  if (stateManager.heroScreenshotRequired) {
-                    stateManager.heroScreenshotRequired = false;
-                    _takeScreenshot();
-                  }
-                });
+                    if (stateManager.heroScreenshotRequired) {
+                      stateManager.heroScreenshotRequired = false;
+                      _takeScreenshot();
+                    }
+                  });
+                }
 
                 animation.removeStatusListener(animationStatusListener);
                 mainEditorCallbacks?.handleEndCloseSubEditor(editorName);
