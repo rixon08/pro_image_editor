@@ -1,11 +1,13 @@
 // Dart imports:
 import 'dart:math';
+import 'dart:typed_data';
 
 // Flutter imports:
 import 'package:flutter/material.dart';
 
 // Project imports:
 import '/core/mixins/standalone_editor.dart';
+import '/core/models/complete_parameters.dart';
 import '/core/models/init_configs/crop_rotate_editor_init_configs.dart';
 import '/shared/widgets/extended/extended_custom_paint.dart';
 import '/shared/widgets/extended/extended_transform_scale.dart';
@@ -88,10 +90,13 @@ mixin CropAreaHistory
 
   double _userScaleFactor = 1;
 
-  /// The current scale factor applied by the user.
+  /// The current *effective* scale factor applied to the view.
   ///
-  /// This property tracks the scaling transformation applied by the user,
-  /// allowing for dynamic resizing of the image.
+  /// This is the value that is actually rendered and stored in the history. It
+  /// equals the maximum of [manualScaleFactor] and the tilt-induced minimum
+  /// zoom calculated in `_setOffsetLimits`, so a perspective tilt can zoom the
+  /// image in to keep the crop selection covered, while straightening it again
+  /// zooms back out to (but never below) the user's manual zoom.
   @protected
   double get userScaleFactor => _userScaleFactor;
 
@@ -105,6 +110,20 @@ mixin CropAreaHistory
       willChange: showWidgets,
     );
   }
+
+  double _manualScaleFactor = 1;
+
+  /// The zoom factor explicitly chosen by the user via gestures (pinch,
+  /// mouse-scroll, double-tap).
+  ///
+  /// The effective [userScaleFactor] never drops below this value. The tilt
+  /// auto-zoom only ever raises the effective zoom above this floor, so when
+  /// the user straightens the image the view returns to their manual zoom.
+  @protected
+  double get manualScaleFactor => _manualScaleFactor;
+
+  @protected
+  set manualScaleFactor(double value) => _manualScaleFactor = value;
 
   Offset _translate = const Offset(0, 0);
 
@@ -188,6 +207,18 @@ mixin CropAreaHistory
   /// cropping, and is used to manage crop boundaries.
   @protected
   Rect get cropRect => _cropRect;
+
+  /// The current tilt rotation in radians around the Z axis.
+  @protected
+  double tiltRotateAngle = 0.0;
+
+  /// The current tilt in radians around the Y axis (left/right).
+  @protected
+  double tiltHorizontalAngle = 0.0;
+
+  /// The current tilt in radians around the X axis (up/down).
+  @protected
+  double tiltVerticalAngle = 0.0;
 
   set cropRect(Rect value) {
     _cropRect = value;
@@ -295,11 +326,26 @@ mixin CropAreaHistory
         flipY: flipY,
         offset: translate,
         cropMode: cropMode,
+        tiltRotate: tiltRotateAngle,
+        tiltHorizontal: tiltHorizontalAngle,
+        tiltVertical: tiltVerticalAngle,
       ),
     );
     screenshotHistoryPosition++;
+    _handleTransformationUpdateEnd();
     setState(() {});
     takeScreenshot();
+  }
+
+  void _handleTransformationUpdateEnd() async {
+    final callback = cropRotateEditorCallbacks?.onTransformUpdateEnd;
+    if (callback == null) return;
+
+    final completeParams = await getCompleteParameters(
+      imageBytes: Uint8List(0),
+    );
+
+    callback(completeParams);
   }
 
   /// Clears forward changes from the history.
@@ -325,6 +371,7 @@ mixin CropAreaHistory
         _setParametersFromHistory();
       }
       cropRotateEditorCallbacks?.handleUndo();
+      _handleTransformationUpdateEnd();
       setState(() {});
     }
   }
@@ -335,6 +382,7 @@ mixin CropAreaHistory
       screenshotHistoryPosition++;
       _setParametersFromHistory();
       cropRotateEditorCallbacks?.handleRedo();
+      _handleTransformationUpdateEnd();
       setState(() {});
     }
   }
@@ -343,8 +391,12 @@ mixin CropAreaHistory
   void _setParametersFromHistory() {
     flipX = activeHistory.flipX;
     flipY = activeHistory.flipY;
+    tiltRotateAngle = activeHistory.tiltRotate;
+    tiltHorizontalAngle = activeHistory.tiltHorizontal;
+    tiltVerticalAngle = activeHistory.tiltVertical;
     translate = activeHistory.offset;
     userScaleFactor = activeHistory.scaleUser;
+    manualScaleFactor = activeHistory.scaleUser;
     cropRect = activeHistory.cropRect;
     aspectRatio = activeHistory.aspectRatio < 0
         ? cropRect.size.aspectRatio
@@ -352,13 +404,15 @@ mixin CropAreaHistory
     setCropMode(activeHistory.cropMode, updateHistory: false);
     rotationCount = (activeHistory.angle * 2 / pi).abs().toInt();
     rotateAnimation =
-        Tween<double>(begin: rotateAnimation.value, end: activeHistory.angle)
-            .animate(
-      CurvedAnimation(
-        parent: rotateCtrl,
-        curve: cropRotateEditorConfigs.rotateAnimationCurve,
-      ),
-    );
+        Tween<double>(
+          begin: rotateAnimation.value,
+          end: activeHistory.angle,
+        ).animate(
+          CurvedAnimation(
+            parent: rotateCtrl,
+            curve: cropRotateEditorConfigs.rotateAnimationCurve,
+          ),
+        );
     rotateCtrl
       ..reset()
       ..forward();
@@ -387,35 +441,36 @@ mixin CropAreaHistory
   /// ```
   /// reset(skipAddHistory: true);
   /// ```
-  void reset({
-    bool skipAddHistory = false,
-  }) {
+  void reset({bool skipAddHistory = false}) {
     initialized = false;
     flipX = false;
     flipY = false;
+    tiltRotateAngle = 0;
+    tiltHorizontalAngle = 0;
+    tiltVerticalAngle = 0;
     translate = Offset.zero;
-    setCropMode(
-      cropRotateEditorConfigs.initialCropMode,
-      updateHistory: false,
-    );
+    setCropMode(cropRotateEditorConfigs.initialCropMode, updateHistory: false);
     int rCount = rotationCount % 4;
-    rotateAnimation =
-        Tween<double>(begin: rCount == 3 ? pi / 2 : -rCount * pi / 2, end: 0)
-            .animate(rotateCtrl);
+    rotateAnimation = Tween<double>(
+      begin: rCount == 3 ? pi / 2 : -rCount * pi / 2,
+      end: 0,
+    ).animate(rotateCtrl);
     rotateCtrl
       ..reset()
       ..forward();
     rotationCount = 0;
 
-    scaleAnimation =
-        Tween<double>(begin: oldScaleFactor * userScaleFactor, end: 1)
-            .animate(scaleCtrl);
+    scaleAnimation = Tween<double>(
+      begin: oldScaleFactor * userScaleFactor,
+      end: 1,
+    ).animate(scaleCtrl);
     scaleCtrl
       ..reset()
       ..forward();
     oldScaleFactor = 1;
 
     userScaleFactor = 1;
+    manualScaleFactor = 1;
     aspectRatio =
         cropRotateEditorConfigs.initAspectRatio ?? CropAspectRatios.custom;
 
@@ -446,4 +501,85 @@ mixin CropAreaHistory
   /// overridden to implement specific fitting logic.
   @protected
   void calcFitToScreen() {}
+
+  /// Generates complete parameters for the image transformation process.
+  ///
+  /// This method calculates all the transformation parameters needed to export
+  /// the edited image, including crop dimensions, rotation, flip operations,
+  /// filters, and blur effects.
+  ///
+  /// The method handles both image and video editing modes:
+  /// - For video editing: uses the video controller's initial resolution
+  /// - For image editing: decodes the original image to get its dimensions
+  ///
+  /// Parameters:
+  /// * [imageBytes] - The original image data as bytes
+  ///
+  /// Returns a [CompleteParameters] object containing:
+  /// * Crop dimensions (width, height) and offset (x, y) if transformed
+  /// * Flip operations in x and y directions (adjusted for 90° rotations)
+  /// * Rotation in turns
+  /// * Applied blur factor
+  /// * List of matrix filters
+  /// * List of tune adjustment matrices
+  /// * Layer data
+  /// * Original image bytes
+  /// * Transformation status flag
+  ///
+  /// The crop dimensions and offsets are only included when [isTransformed]
+  /// is true. Flip operations are automatically adjusted when the image
+  /// is rotated by 90 degrees to maintain correct orientation.
+  Future<CompleteParameters> getCompleteParameters({
+    required Uint8List imageBytes,
+  }) async {
+    TransformConfigs transformC =
+        !canRedo && !canUndo && initialTransformConfigs != null
+        ? initialTransformConfigs!
+        : activeHistory;
+
+    final isTransformed = transformC.isNotEmpty;
+
+    Size originalImageSize;
+    if (isVideoEditor) {
+      originalImageSize = videoController!.initialResolution;
+    } else {
+      var rawOriginalSize =
+          await widget.editorImage?.safeByteArray(context) ?? imageBytes;
+      var decodedImage = await decodeImageFromList(rawOriginalSize);
+      originalImageSize = Size(
+        decodedImage.width.toDouble(),
+        decodedImage.height.toDouble(),
+      );
+    }
+
+    Size? outputSize = transformC.getCropSize(originalImageSize);
+    Offset? outputOffset = transformC.getCropStartOffset(originalImageSize);
+
+    return CompleteParameters(
+      blur: appliedBlurFactor,
+      matrixFilterList: appliedFilters,
+      matrixTuneAdjustmentsList: appliedTuneAdjustments
+          .map((item) => item.matrix)
+          .toList(),
+      cropWidth: isTransformed ? outputSize.width.round() : null,
+      cropHeight: isTransformed ? outputSize.height.round() : null,
+      cropX: isTransformed ? outputOffset.dx.round() : null,
+      cropY: isTransformed ? outputOffset.dy.round() : null,
+      flipX: transformC.is90DegRotated ? transformC.flipY : transformC.flipX,
+      flipY: transformC.is90DegRotated ? transformC.flipX : transformC.flipY,
+      rotateTurns: transformC.angleToTurns(),
+      tiltRotate: transformC.tiltRotate,
+      tiltHorizontal: transformC.tiltHorizontal,
+      tiltVertical: transformC.tiltVertical,
+      startTime: null,
+      endTime: null,
+      image: imageBytes,
+      isTransformed: isTransformed,
+      layers: layers ?? [],
+      originalImageSize: null,
+      temporaryDecodedImageSize: null,
+      bodySize: null,
+      editorSize: null,
+    );
+  }
 }

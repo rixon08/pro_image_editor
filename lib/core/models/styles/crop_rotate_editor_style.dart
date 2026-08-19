@@ -2,6 +2,9 @@
 import 'package:flutter/services.dart';
 
 import '../../constants/editor_style_constants.dart';
+import 'tilt_style.dart';
+
+export 'tilt_style.dart';
 
 /// The `CropRotateEditorStyle` class defines the styles for the crop and rotate
 /// editor in the image editor.
@@ -56,6 +59,7 @@ class CropRotateEditorStyle {
     this.appBarBackground = kImageEditorAppBarBackground,
     this.appBarColor = kImageEditorAppBarColor,
     this.helperLineColor = const Color(0xFF000000),
+    this.helperLineWidth = 0.5,
     this.background = kImageEditorBackground,
     this.cropCornerColor = kImageEditorPrimaryColor,
     this.cropOverlayColor = const Color(0xFF000000),
@@ -68,15 +72,20 @@ class CropRotateEditorStyle {
     this.cropOverlayOpacity = 0.7,
     this.cropOverlayInteractionOpacity = 0.25,
     this.uiOverlayStyle = kImageEditorUiOverlayStyle,
-  })  : assert(cropOverlayOpacity >= 0.0 && cropOverlayOpacity <= 1.0,
-            'cropOverlayOpacity must be between 0.0 and 1.0'),
-        assert(cropOverlayInteractionOpacity >= 0.0,
-            'cropOverlayInteractionOpacity must be non-negative'),
-        assert(
-          cropOverlayInteractionOpacity <= cropOverlayOpacity,
-          'cropOverlayInteractionOpacity must not be greater than '
-          'cropOverlayOpacity',
-        );
+    this.tiltStyle = const TiltStyle(),
+  }) : assert(
+         cropOverlayOpacity >= 0.0 && cropOverlayOpacity <= 1.0,
+         'cropOverlayOpacity must be between 0.0 and 1.0',
+       ),
+       assert(
+         cropOverlayInteractionOpacity >= 0.0,
+         'cropOverlayInteractionOpacity must be non-negative',
+       ),
+       assert(
+         cropOverlayInteractionOpacity <= cropOverlayOpacity,
+         'cropOverlayInteractionOpacity must not be greater than '
+         'cropOverlayOpacity',
+       );
 
   /// Background color of the app bar in the crop and rotate editor.
   final Color appBarBackground;
@@ -104,6 +113,12 @@ class CropRotateEditorStyle {
 
   /// Color from the helper lines when moving the image.
   final Color helperLineColor;
+
+  /// The width (thickness) of the helper lines drawn inside the crop area.
+  ///
+  /// Set to `0` to hide the helper lines entirely.
+  /// Defaults to `0.5`.
+  final double helperLineWidth;
 
   /// This refers to the overlay area atop the image when the cropping area is
   /// smaller than the image.
@@ -138,6 +153,9 @@ class CropRotateEditorStyle {
   /// UI overlay style, defining the appearance of system status bars.
   final SystemUiOverlayStyle uiOverlayStyle;
 
+  /// The style configuration for the tilt (perspective/skew) functionality.
+  final TiltStyle tiltStyle;
+
   /// Creates a copy of this `CropRotateEditorStyle` object with the given
   /// fields replaced with new values.
   ///
@@ -154,25 +172,30 @@ class CropRotateEditorStyle {
     Color? background,
     Color? cropCornerColor,
     Color? helperLineColor,
+    double? helperLineWidth,
     Color? cropOverlayColor,
     double? cropCornerLength,
     double? cropCornerThickness,
     double? cropOverlayOpacity,
     double? cropOverlayInteractionOpacity,
     SystemUiOverlayStyle? uiOverlayStyle,
+    TiltStyle? tiltStyle,
   }) {
     return CropRotateEditorStyle(
       appBarBackground: appBarBackground ?? this.appBarBackground,
       appBarColor: appBarColor ?? this.appBarColor,
       bottomBarBackground: bottomBarBackground ?? this.bottomBarBackground,
       bottomBarColor: bottomBarColor ?? this.bottomBarColor,
-      aspectRatioSheetBackgroundColor: aspectRatioSheetBackgroundColor ??
+      aspectRatioSheetBackgroundColor:
+          aspectRatioSheetBackgroundColor ??
           this.aspectRatioSheetBackgroundColor,
-      aspectRatioSheetForegroundColor: aspectRatioSheetForegroundColor ??
+      aspectRatioSheetForegroundColor:
+          aspectRatioSheetForegroundColor ??
           this.aspectRatioSheetForegroundColor,
       background: background ?? this.background,
       cropCornerColor: cropCornerColor ?? this.cropCornerColor,
       helperLineColor: helperLineColor ?? this.helperLineColor,
+      helperLineWidth: helperLineWidth ?? this.helperLineWidth,
       cropOverlayColor: cropOverlayColor ?? this.cropOverlayColor,
       cropCornerLength: cropCornerLength ?? this.cropCornerLength,
       cropCornerThickness: cropCornerThickness ?? this.cropCornerThickness,
@@ -180,6 +203,7 @@ class CropRotateEditorStyle {
       cropOverlayInteractionOpacity:
           cropOverlayInteractionOpacity ?? this.cropOverlayInteractionOpacity,
       uiOverlayStyle: uiOverlayStyle ?? this.uiOverlayStyle,
+      tiltStyle: tiltStyle ?? this.tiltStyle,
     );
   }
 }

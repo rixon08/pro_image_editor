@@ -1,11 +1,12 @@
 // Dart imports:
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '/core/mixins/converted_callbacks.dart';
 import '/core/models/complete_parameters.dart';
+import '/core/models/editor_callbacks/standalone_editor_callbacks.dart';
 import '/features/filter_editor/types/filter_matrix.dart';
 import '/features/tune_editor/models/tune_adjustment_matrix.dart';
 import '/shared/controllers/video_controller.dart';
@@ -37,8 +38,10 @@ mixin StandaloneEditor<T extends EditorInitConfigs> {
 
 /// A mixin providing access to standalone editor configurations and image
 /// within a state.
-mixin StandaloneEditorState<T extends StatefulWidget,
-        I extends EditorInitConfigs>
+mixin StandaloneEditorState<
+  T extends StatefulWidget,
+  I extends EditorInitConfigs
+>
     on State<T>, ImageEditorConvertedConfigs, ImageEditorConvertedCallbacks {
   /// Returns the initialization configurations for the editor.
   I get initConfigs => (widget as StandaloneEditor<I>).initConfigs;
@@ -124,8 +127,9 @@ mixin StandaloneEditorState<T extends StatefulWidget,
   }) async {
     if (imageInfos == null || forceUpdate == true) {
       imageInfos = (await decodeImageInfos(
-        bytes: await (editorImage?.safeByteArray(context) ??
-            _createTransparentImage()),
+        bytes:
+            await (editorImage?.safeByteArray(context) ??
+                _createTransparentImage()),
         screenSize: editorBodySize,
         configs: activeHistory,
       ));
@@ -166,7 +170,8 @@ mixin StandaloneEditorState<T extends StatefulWidget,
       }
 
       /// Capture the final screenshot
-      bool screenshotIsCaptured = screenshotHistoryPosition > 0 &&
+      bool screenshotIsCaptured =
+          screenshotHistoryPosition > 0 &&
           screenshotHistoryPosition <= screenshotHistory.length;
       Uint8List? bytes = await screenshotCtrl.captureFinalScreenshot(
         imageInfos: imageInfos!,
@@ -215,6 +220,10 @@ mixin StandaloneEditorState<T extends StatefulWidget,
             image: imageBytes,
             isTransformed: isTransformed,
             layers: layers ?? [],
+            originalImageSize: null,
+            temporaryDecodedImageSize: null,
+            bodySize: null,
+            editorSize: null,
           ),
         );
       }
@@ -279,6 +288,41 @@ mixin StandaloneEditorState<T extends StatefulWidget,
     );
   }
 
+  /// Whether the editor's built-in keyboard shortcuts are enabled.
+  ///
+  /// Editors that expose an `enableKeyboardShortcuts` option override this.
+  /// When `false`, neither the built-in shortcuts nor the
+  /// [standaloneEditorCallbacks]' `onKeyboardEvent` are invoked.
+  @protected
+  bool get enableKeyboardShortcuts => true;
+
+  /// The standalone callbacks of the concrete editor, used to forward keyboard
+  /// events to [StandaloneEditorCallbacks.onKeyboardEvent].
+  ///
+  /// Editors override this to return their specific callbacks (e.g.
+  /// `filterEditorCallbacks`). Returns `null` by default, which disables the
+  /// keyboard callback for that editor.
+  @protected
+  StandaloneEditorCallbacks? get standaloneEditorCallbacks => null;
+
+  /// Hook for editor-specific built-in keyboard shortcuts.
+  ///
+  /// Called only when [enableKeyboardShortcuts] is `true` and the event was not
+  /// already consumed by `onKeyboardEvent`. Returns `true` when the event was
+  /// handled and should stop propagating.
+  @protected
+  bool onCustomKeyEvent(KeyEvent event) => false;
+
+  bool _handleStandaloneKeyEvent(KeyEvent event) {
+    if (!enableKeyboardShortcuts) return false;
+
+    if (standaloneEditorCallbacks?.handleKeyboardEvent(event) ?? false) {
+      return true;
+    }
+
+    return onCustomKeyEvent(event);
+  }
+
   @override
   @mustCallSuper
   void initState() {
@@ -289,11 +333,13 @@ mixin StandaloneEditorState<T extends StatefulWidget,
       ignoreGeneration: !initConfigs.convertToUint8List,
     );
     rebuildController = StreamController.broadcast();
+    ServicesBinding.instance.keyboard.addHandler(_handleStandaloneKeyEvent);
   }
 
   @override
   @mustCallSuper
   void dispose() {
+    ServicesBinding.instance.keyboard.removeHandler(_handleStandaloneKeyEvent);
     screenshotCtrl.destroy();
     rebuildController.close();
     super.dispose();
@@ -302,8 +348,9 @@ mixin StandaloneEditorState<T extends StatefulWidget,
   Future<Uint8List> _createTransparentImage() async {
     if (_transparentImageBytes != null) return _transparentImageBytes!;
 
-    _transparentImageBytes =
-        await createTransparentImage(videoController!.initialResolution);
+    _transparentImageBytes = await createTransparentImage(
+      videoController!.initialResolution,
+    );
     return _transparentImageBytes!;
   }
 }

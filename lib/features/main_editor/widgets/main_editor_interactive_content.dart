@@ -128,7 +128,8 @@ class MainEditorInteractiveContent extends StatelessWidget {
         children: [
           MainEditorFontPreloader(emojiEditorConfigs: configs.emojiEditor),
           Padding(
-            padding: hasSelectedLayers &&
+            padding:
+                hasSelectedLayers &&
                     configs.layerInteraction.hideToolbarOnInteraction
                 ? EdgeInsets.only(
                     top: sizesManager.appBarHeight,
@@ -143,7 +144,7 @@ class MainEditorInteractiveContent extends StatelessWidget {
             _buildCropAreaOverlay(),
 
           /// Build video controls
-          if (isVideoEditor)
+          if (isVideoEditor && configs.videoEditor.showControls)
             AnimatedOpacity(
               opacity: hasSelectedLayers ? 0 : 1,
               duration: configs.layerInteraction.videoControlsSwitchDuration,
@@ -185,6 +186,7 @@ class MainEditorInteractiveContent extends StatelessWidget {
     return ExtendedInteractiveViewer(
       key: interactiveViewerKey,
       enableExternalGestureDetector: true,
+      clipBehavior: mainConfigs.interactiveViewerClipBehavior,
       zoomConfigs: mainConfigs,
       onInteractionStart: (details) {
         callbacks.mainEditorCallbacks?.onEditorZoomScaleStart?.call(details);
@@ -208,10 +210,7 @@ class MainEditorInteractiveContent extends StatelessWidget {
           ? Stack(
               alignment: Alignment.center,
               fit: StackFit.expand,
-              children: [
-                buildVideo(),
-                _buildContentRecorder(),
-              ],
+              children: [buildVideo(), _buildContentRecorder()],
             )
           : _buildContentRecorder(),
     );
@@ -230,7 +229,9 @@ class MainEditorInteractiveContent extends StatelessWidget {
           buildLayers(),
           if (configs.mainEditor.widgets.bodyItemsRecorded != null)
             ...configs.mainEditor.widgets.bodyItemsRecorded!(
-                state, rebuildController.stream),
+              state,
+              rebuildController.stream,
+            ),
         ],
       ),
     );
@@ -264,7 +265,8 @@ class MainEditorInteractiveContent extends StatelessWidget {
       backgroundColor: configs.mainEditor.style.background,
       imgRatio: hasTransformChanges
           ? transformConfigs.cropRect.size.aspectRatio
-          : sizesManager.decodedImageSize.aspectRatio,
+          : configs.cropRotateEditor.initialOvalCropAspectRatio ??
+                sizesManager.decodedImageSize.aspectRatio,
       isRoundCropper: cropMode == CropMode.oval,
       is90DegRotated: transformConfigs.is90DegRotated,
       interactiveViewerScale:

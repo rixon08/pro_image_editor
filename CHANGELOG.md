@@ -1,5 +1,295 @@
 # Changelog
 
+## 13.3.1
+- **FIX**(crop-rotate): Crop handles no longer jump onto the finger when a drag starts; the gesture slop and the distance to the grabbed handle are compensated.
+- **FIX**(crop-rotate): Corner drags with a fixed aspect ratio now follow the finger diagonally instead of tracking horizontal movement only, and stay inside the image.
+- **FIX**(crop-rotate): Pinch-to-zoom no longer jumps at gesture start and is no longer interrupted when the second finger touches down.
+- **FIX**(crop-rotate): The overlay outside the crop area fades smoothly again when an interaction is interrupted.
+- **FIX**(crop-rotate): Fix the auto zoom-out hit area being misplaced on Android and with custom app bars.
+- **FIX**(crop-rotate): Resizing a tilted image no longer makes it jump around; the tilt bounds now follow the crop animation instead of overriding its zoom, and the auto zoom-out stops at the zoom the tilt requires.
+
+## 13.3.0
+- **FEAT**(layers): Rasterize layers outside a live editor session with `LayerRasterizer` and `LayerRasterizerHost`.
+
+## 13.2.3
+- **FIX**(main-editor): A layer sharing its position with others (a stack of overlapping layers) can now be dragged away instead of being trapped by their coincident alignment guides. Snapping re-arms once the layer moves clear.
+
+## 13.2.2
+- **FIX**(main-editor): Ignore the spurious scale-end Flutter fires when a finger is added or removed mid-gesture (e.g. a third finger during a two-finger layer rotation). It previously ran the full interaction teardown, corrupting the history stack and crashing on iOS with a `_dependents.isEmpty` assertion (#850).
+
+## 13.2.1
+- **FIX**(text-editor): Stop the rounded background text from growing and reflowing the moment editing completes (#849). The editing preview now reserves the same hit-box padding as the finished layer and wraps the background at the same column as the editable text, so the background no longer shifts or changes line count when editing ends.
+
+## 13.2.0
+- **FEAT**(paint): Combine several selected paint layers into one via `mergeSelectedLayers()` / `canMergeSelectedLayers`. `PaintLayer` now holds multiple `items`, baking each source transform into a shared frame so the drawing looks identical after merging.
+- **FEAT**(filter): Flatten the active filter stack into a single `FilterState` via `mergeFilters()` / `canMergeFilters` (appearance-identical; skipped for video-timeline filters).
+
+## 13.1.0
+- **CHORE**(android): Migrate the Android module to Flutter's built-in Kotlin (drop the manual Kotlin Gradle Plugin apply) so the plugin no longer triggers the KGP deprecation warning and stays AGP 9+ compatible. Now requires Flutter 3.44+.
+
+## 13.0.0
+- **FEAT**(tune): Replace the `luminance` control (which only desaturated) with a real `tint` green–magenta adjustment, the natural complement to `temperature`.
+- **FIX**(filter): Fix `colorOverlay` tinting towards the complementary color instead of the overlay color (inverted sign), and rebuild `fade` as a proper fade (lower contrast + lifted black point) instead of a desaturation.
+- **BREAKING**(tune): Remove the `sharpness` control (a per-pixel color matrix cannot sharpen) and rename `luminance` → `tint` across `ColorFilterAddons`, `TuneEditorIcons` and `I18nTuneEditor`; saved histories using the old tune ids are no longer recognized.
+
+## 12.11.1
+- **FIX**(layers): Anchor the video-timeline `scale` layer animation on the layer's visual center. Combining `scale` with a `slide` (e.g. slide-in from the top) previously drifted the layer in diagonally instead of straight, because scaling used the layout-box center while the layer content is painted off-center.
+
+## 12.11.0
+- **FEAT**(crop-rotate): Add perspective tilt/skew (#525). New `CropRotateTool.tilt` with rotate/horizontal/vertical rulers (`TiltConfigs`); the crop stays inside the tilted image via auto-zoom, and tilt is hidden in the video editor by default.
+
+## 12.10.0
+- **FEAT**(helper-lines): Add app-defined custom snapping guide lines (#834). `HelperLineConfigs.customGuides` accepts a list of `HelperGuideLine`s (vertical or horizontal, positioned with absolute editor-body pixels or a normalized `0.0`-`1.0` fraction) that participate in layer snapping and are drawn - using the new `HelperLineStyle.customGuideColor` - while a layer snaps to them. Useful for safe areas, thirds, columns or any layout-specific alignment points. See the new `Custom-Guide-Lines` example.
+- **FEAT**(helper-lines): Text and paint layers now snap by their edges - left/center/right and top/center/bottom - in addition to their center (#833). When aligning to the editor center lines, another layer or a custom guide, whichever edge sits closest to the guide snaps to it, making it easy to align text/paint blocks by their visible edge. Other layer types continue to snap by their configured anchor.
+
+## 12.9.0
+- **FEAT**(editors): Support keyboard handling in the sub-editors, not just the main editor (#837). The `onKeyboardEvent` callback is now available on every standalone editor's callbacks (crop-rotate, paint, filter, tune, blur) via `StandaloneEditorCallbacks`; returning `true` consumes the event and skips the built-in shortcut. The crop-rotate and paint editors additionally gain an `enableKeyboardShortcuts` option (default `true`) to disable their built-in shortcuts (e.g. `R`/`F` in the crop-rotate editor). Previously these callbacks and the option only affected the main editor, so the crop-rotate `R`/`F` shortcuts could not be intercepted or disabled.
+
+## 12.8.2
+- **FIX**(crop-rotate): Honor `initAspectRatio` for the oval cropper in the main editor's initial state. Opening the editor directly in `CropMode.oval` with a fixed `initAspectRatio` (e.g. `1.0`) previously rendered and exported an ellipse stretched to the full image bounds for non-square images, because the initial (un-transformed) state never consulted `initAspectRatio` and fell back to the full image aspect ratio. The initial oval mask now uses a centered crop of the requested ratio in the overlay, the capture overlay and the export clip (so `1.0` produces a circle), while a free (`-1`) or original (`0.0`) ratio keeps the previous full-image behavior.
+
+## 12.8.1
+- **FIX**(crop-rotate): Cover the image edge with the crop overlay when the image is panned. The darkened overlay is painted on top of the image and its outer rectangle matched the rendered image bounds exactly, so when an image edge floated inside the viewport (e.g. the image pushed to the bottom) anti-aliasing along that shared edge left a ~1px partially-transparent seam that revealed a thin line of the image. The overlay rectangle is now slightly overscanned beyond the image bounds so the seam falls on the surrounding background where it is invisible.
+
+## 12.8.0
+- **FIX**(layers): Make the video-timeline `slide` layer animation edge-aware. Previously the layer was only translated by its own width/height (a single layer size), so a layer that did not sit against the canvas edge stayed partially visible while sliding in/out. The slide now uses the layer's center and the canvas size to push the layer's nearest edge exactly onto (or off) the canvas border, so off-center layers leave the visible area completely. The preview math mirrors the matching native renderer change in `pro_video_editor` (`ApplyAnimation.kt` / `ApplyAnimation.swift`). **Use this together with the corresponding `pro_video_editor` release** so the in-editor preview keeps matching the exported video. Prerelease.
+
+## 12.7.0
+- **FEAT**(layers): Add first-class per-layer enter/leave animations for the video timeline. A new `LayerAnimation` model (`type` fade/slide/scale, `phase` animateIn/animateOut/animateInOut, `duration`, `curve`, optional `slideDirection` and `scaleFrom`) can be attached to any layer via the new `Layer.animations` list (or set on an existing layer through `ProImageEditor.setLayerTimeline(animations: …)`), mirroring the `pro_video_editor` model so the in-editor preview matches the exported result. The video-layer-timeline preview is now phase-aware: it composes fade (opacity), slide (per-direction translation) and scale effects across a layer's enter and exit windows, so the enter and leave phases can use distinct animation types. The legacy `enterDuration` / `exitDuration` / `enterCurve` / `exitCurve` fade fields are kept as a back-compat convenience and can be read as a unified animation list via `Layer.effectiveAnimations`. `animations` is serialized in `toMap` / `fromMap` and carried through `copyWith`, equality and layer cloning. Non-breaking, additive change.
+
+## 12.6.0
+- **FEAT**(import-export): Add optional `widgetLoader` (and `widgetRecords`) parameters to `CompleteParameters.fromMap` and `CompleteParameters.fromJson` so widget/sticker layers exported with an `exportConfigs.id` can be reconstructed. This is a non-breaking, additive change; existing callers are unaffected.
+
+## 12.5.3
+- **CHORE**(main-editor): Refactor the layer-scale regression test for readability.
+
+## 12.5.2
+- **FIX**(main-editor): Prevent layer scale from compounding (layers shrinking) when a single paint session adds multiple layers. Shared layer instances reused across history entries are now rescaled at most once per resize/import recalculation.
+
+## 12.5.1
+- **FEAT**(main-editor): Add `interactiveViewerClipBehavior` option to `MainEditorConfigs` (default `Clip.hardEdge`) to control clipping of the editor's interactive content area.
+
+## 12.5.0
+- **FEAT**(crop-rotate): Add `enableKeepAspectRatioOnRotate` option to keep the selected aspect ratio orientation when rotating (e.g. `9:16` stays `9:16` instead of becoming `16:9`), zooming the image in so it still fully covers the crop area.
+
+## 12.4.8
+- **CHORE**: Update CI to Flutter 3.44 and fix deprecated API usages.
+
+## 12.4.7
+- **FIX**(example): Update Supabase initialization to use publishable key and upgrade `supabase_flutter` dependency to 2.14.1.
+
+## 12.4.6
+- **FEAT**(ios/macos): Add Swift Package Manager (SPM) support.
+
+## 12.4.5
+- **FIX**(layers): Improve text quality by applying `FilterQuality.high` when rendering layer images with transforms.
+
+## 12.4.4
+- **FIX**(layers): Improve exported layer resolution for scaled layers to avoid blurry output.
+
+## 12.4.3
+- **FIX**(state-manager): Update activeFilters and activeTuneAdjustments to directly use historyPointer.
+
+## 12.4.2
+- **FEAT**(state-manager): Add `replaceHistory()` to replace an existing history entry in the stack (current pointer by default, or a custom index).
+
+## 12.4.1
+- **FEAT**(main-editor): Add `captureImageOnDone` to `MainEditorConfigs` (default `true`) to make final `captureEditorImage()` on done optional.
+- **FIX**(main-editor): Prevent `_isProcessingFinalImage` from getting stuck by guarding done-flow cleanup with `try/finally`.
+
+## 12.4.0
+- **FEAT**(audio-editor): Add `volume`, `loop`, `audioStartTime`, `audioEndTime`, and `endTime` fields to `AudioTrack`.
+- **FEAT**(complete-parameters): Add `audioTracks` field (`List<AudioTrack>`) to `CompleteParameters` for multiple audio track support.
+- **DEPRECATED**(complete-parameters): `customAudioTrack` — use `audioTracks` instead.
+- **DEPRECATED**(audio-editor): `enableLoop` parameter in `AudioTrack.copyWith` — use `loop` instead.
+
+## 12.3.6
+- **FEAT**(complete-parameters): Export `meta` field in `CompleteParameters` so user-defined metadata is available in the `onCompleteWithParameters` callback.
+
+## 12.3.5
+- **FEAT**(processor): Add `initializationDelay` to `ProcessorConfigs` to optionally defer isolate/thread startup and avoid jank during page transition animations.
+
+## 12.3.4
+- **FIX**(main-editor): Preserve active `filters`, `tuneAdjustments`, and `meta` in `addHistory()` when values are not explicitly provided.
+- **FIX**(main-editor): Store copied `filters`/`tuneAdjustments`/`meta` in history entries to prevent shared-reference mutations across undo/redo states.
+
+## 12.3.3
+- **FEAT**(filter-editor): Add unique `id` to `FilterState`, export/import it, and generate backward-compatible IDs when missing in older history payloads.
+
+## 12.3.2
+- **FEAT**(filter-editor): Add `name` field to `FilterState` to carry the filter name through the editor, history, and import/export.
+- **FEAT**(state-manager): Expose `activeMeta` as a public field, updated on every undo/redo alongside `activeLayers`.
+
+## 12.3.1
+- **FEAT**(state-history): Add `meta` field (`Map<String, dynamic>`) to `EditorStateHistory` for user-defined data that is preserved across undo/redo and import/export.
+- **FEAT**(layers): Add `basePixelRatio` parameter to `captureAsPng`, `captureAllLayers`, and `captureAllLayersWithMeta` for image-relative layer export resolution.
+- **FIX**(timeline): Keep hidden layers painted in the render tree so `captureAsPng` works for timeline-dismissed layers.
+- **FIX**(layers): Use `imageInfos.pixelRatio` instead of device pixel ratio for layer capture in `doneEditing`, ensuring correct export resolution relative to the source image.
+
+## 12.3.0
+- **FEAT**(timeline): Add `meta` field to `FilterState` and `TuneAdjustmentMatrix` for storing arbitrary metadata on filters and tune adjustments.
+- **FEAT**(timeline): Add `copyWith()` to `FilterState` and `TuneAdjustmentMatrix`.
+- **FEAT**(main-editor): Add `setFilterTimeline()` and `setTuneTimeline()` methods for updating timeline properties of filters and tune adjustments.
+- **FEAT**(main-editor): Support `skipUpdateHistory` in `setFilterTimeline()` and `setTuneTimeline()` for live trimming without history overhead.
+- **PERF**(main-editor): `setLayerTimeline` with `skipUpdateHistory` now copies only the affected layer instead of the entire layer list.
+- **PERF**(main-editor): Skip `setLayerTimeline` entirely when no values would change.
+- **REFACTOR**(state-manager): Simplify `activeFilters` and `activeTuneAdjustments` to public fields.
+
+## 12.2.2
+- **FEAT**(main-editor): Expose `editTextLayer`, `editPaintLayer`, `applyTextLayerChanges`, `removeFilter`, and `clearFilters` as public methods.
+- **DOCS**(main-editor): Add doc comments to `editTextLayer`, `editPaintLayer`, `applyTextLayerChanges`, `removeFilter`, and `clearFilters`.
+
+## 12.2.1
+- **FIX**(timeline): Recalculate layer visibility when `startTime`, `endTime`, `enterDuration`, or `exitDuration` change while the video is paused.
+
+## 12.2.0
+- **FEAT**(timeline): Add video timeline visibility to layers, filters, and tune adjustments with configurable `startTime`, `endTime`, enter/exit durations and curves.
+- **FEAT**(complete-parameters): Add `filterStates`, `tuneAdjustments`, and `capturedLayers` to `CompleteParameters`. Add `captureLayersOnDone` config to `MainEditorConfigs`.
+
+## 12.1.0
+- **FEAT**(layers): Add layer export API to capture individual layers as PNG images. Use `Layer.captureAsPng()` for single layers or `Layer.captureAllLayers()` for batch export with shared isolate reuse. The main editor exposes `captureAllLayers()` and `captureAllLayersWithMeta()` convenience methods.
+- **FEAT**(layers): Add `ExportedLayer` model containing the source layer, encoded image bytes, and logical size metadata.
+
+## 12.0.13
+- **FEAT**(text-editor): Add `composingTextDecoration` to `TextEditorConfigs` to control the text decoration of the IME composing region. Defaults to `TextDecoration.none` to remove the underline shown when `enableSuggestions` is active.
+
+## 12.0.12
+- **FEAT**(text-editor): Add `spellCheckConfiguration` to `TextEditorConfigs` for enabling spell checking in the text input field.
+
+## 12.0.11
+- **FEAT**(text-editor): Add `inputLetterSpacing` and `inputShadows` to `TextEditorStyle` for customizing letter spacing and text shadows.
+- **FEAT**(callbacks): Add `onLayerInteractionEnd` callback to `MainEditorCallbacks`, triggered when layer interaction ends.
+- **FEAT**(helper-lines): Allow helper lines to be overridden via custom configurations.
+- **FIX**(sub-editors): Remove hidden `BottomAppBar` `SafeArea` gap in sub-editors.
+
+## 12.0.10
+- **FIX**(iOS, macOS): Restore CocoaPods compatibility for the native Darwin plugin alongside Swift Package Manager support.
+
+## 12.0.9
+- **FIX**(text-editor): Disable system text scale factor in `RoundedBackgroundTextField` to ensure consistent text sizing regardless of user accessibility settings.
+
+## 12.0.8
+- **PERF**(paint-editor): Optimize freestyle path building by reducing redundant `moveTo` calls, eliminating intermediate list allocations, and using `distanceSquared` instead of `distance`.
+- **PERF**(paint-editor): Skip `Opacity` widget wrapping when layer opacity is 1.0.
+- **PERF**(paint-editor): Replace O(N×M) layer filtering in `done()` with Map-based O(1) lookup.
+- **PERF**(main-editor): Replace O(N²) layer copy loop when closing paint editor with single deep-copy and incremental shallow snapshots.
+- **PERF**(main-editor): Batch history entries without redundant `updateActiveItems()` calls via new `skipUpdateActiveItems` parameter on `addHistory()`.
+
+## 12.0.7
+- **FEAT**(text-editor): Add `leadingDistribution` property to `TextEditorStyle` for configuring how extra line height is distributed. Use `TextLeadingDistribution.even` to vertically center text within rounded background rects at non-default line heights. Defaults to `proportional` for backward compatibility.
+
+## 12.0.6
+- **FEAT**(platform): Add shared Darwin (iOS/macOS) native plugin implementation using Swift Package Manager.
+
+## 12.0.5
+- **FEAT**(editor-audio): Add `safeFilePath` method to `EditorAudio` that returns a file path for the audio source. For file sources, it returns the path directly. For memory, asset, and network sources, it writes the data to a temporary file. File extension is automatically extracted from asset paths and network URLs.
+
+## 12.0.4
+- **FIX**(wasm): Resolve WASM incompatibility caused by unconditional `dart:isolate` import. The `IsolateManager` is now loaded via a conditional import, so web/WASM builds use a stub that falls back to single-threaded processing.
+
+## 12.0.3
+- **FEAT**(crop-rotate-editor): Add `exportOvalMask` to `CropRotateEditorConfigs` (default `true`). When set to `false`, the exported image uses a plain rectangular crop even if `CropMode.oval` is active, while the oval UI remains visible inside the crop editor.
+- **FEAT**(crop-rotate-editor): Add `helperLineWidth` to `CropRotateEditorStyle`, allowing the grid line thickness to be customized or hidden entirely by setting it to `0`.
+
+## 12.0.2
+- **FIX**(main-editor): Resolve crash when `setState` is called after widget disposal, preventing "Cannot add new events after calling close" error.
+
+## 12.0.1
+- **FIX**(layers): Resolve issue where layer interaction button tooltips would absorb pointer events in Flutter 3.41+, preventing scale and rotate gestures from working.
+- **CHORE**: Update minimum Flutter version to 3.41.0 and Dart SDK to 3.11.0.
+
+## 12.0.0
+- **FEAT**(audio-editor): Added a new Audio Editor to the Video Editor, allowing users to add background music. Users can set the audio start time and adjust the balance between the original and overlay tracks.
+- **FEAT**(clips-editor): Introduced a new Clips Editor that lets users combine multiple video clips into a single merged video.
+
+## 11.23.0
+- **FEAT**(paint-editor): Add `customPathBuilders` to `PaintEditorConfigs`, allowing users to register custom `PathBuilderBase` implementations for any paint mode.
+- **FEAT**(paint-editor): Add `custom1`, `custom2`, `custom3` paint modes that require custom path builders to be registered. These can be fully customized with custom icons and i18n labels.
+- **FIX**(paint-editor): Arrow head size now scales proportionally with stroke width for consistent appearance.
+
+## 11.22.2
+- **FEAT**(helper-lines): Helper line stroke width is now configurable via the configs.
+- **FIX**(paint-editor): Fix drawing latency with the Apple Pencil.
+
+## 11.22.1
+- **FIX**(layers): Resolve issue of layers always being clipped and unable to extend beyond the image editor.
+
+## 11.22.0
+- **FEAT**(image-generation): Add `captureImageByteFormat` config to `ImageGenerationConfigs` to control the byte format used when capturing images. Defaults to `ImageByteFormat.rawStraightRgba` which prevents black border artifacts around transparent edges when exporting to PNG.
+- **FEAT**(main-editor): Add `enableKeyboardShortcuts` config to `MainEditorConfigs` to optionally disable library-side keyboard shortcuts, allowing apps to implement their own key bindings without conflicts.
+
+## 11.21.3
+- **FEAT**(video-editor): Add `videoSetupLoadingIndicator` widget to `VideoEditorWidgets` to allow customizing the loading indicator shown while the video player is initializing.
+
+## 11.21.2
+- **FEAT**(video-editor): Add `showControls` config to `VideoEditorConfigs` to allow hiding the video editor controls UI.
+
+## 11.21.1
+- **FEAT**(text-editor): Add `resizeToAvoidBottomInset` config to control whether the editor resizes when the keyboard appears.
+- **FIX**(paint-editor): Resolve issue where erasing would randomly remove other layers.
+
+## 11.21.0
+- **FIX**(keyboard-shortcuts): Block Ctrl-based shortcuts when Alt is pressed to prevent conflicts with keyboard layouts (e.g., Polish) where Ctrl+Alt+Z is used for typing characters. More details in PR [#757](https://github.com/hm21/pro_image_editor/pull/757).
+
+## 11.20.1
+- **FIX**: Resolve issue where DeferPointer shows an error when the hero animations is running for the text layers from the custom screens.
+
+## 11.20.0
+- **FEAT**(main-editor): Add the flag `enableSubEditorPage` which allows sub-editors to be opened with the same constraints as the editor itself. More details in PR [#752](https://github.com/hm21/pro_image_editor/pull/752).
+
+## 11.19.1
+- **FEAT**(main-editor): Add `onEditTextLayer` callback to `MainEditorCallbacks`, allowing users to open a custom text editor when a text layer is tapped.
+- **FEAT**(main-editor): Add `onCreateTextLayer` callback to `MainEditorCallbacks`, allowing users to open a custom text editor when creating a new text layer.
+- **FEAT**(text-editor): Add `bodyItemsOverlay` to `TextEditorWidgets` for placing custom widgets above all other content in the text editor body.
+- **FEAT**(text-editor): Add `textFieldPadding` to `TextEditorStyle` for applying padding outside the scroll area of the text field.
+
+## 11.19.0
+- **FEAT**(CompleteParameters): Add serialization methods (`toMap`, `fromMap`, `toJson`, `fromJson`).
+
+## 11.18.3
+- **FEAT**(paint-editor): Add freestyle arrow modes (`freeStyleArrowStart`, `freeStyleArrowEnd`, `freeStyleArrowStartEnd`) to draw freehand paths with arrowheads at the start, end, or both ends.
+
+## 11.18.2
+- **FEAT**(EditorSafeArea): Add convenience constructors `none`, `symmetric`, and `fromLTRB` for easier safe area configuration.
+- **FIX**(HelperLines): Resolves the issue of horizontal lines not showing up when the editor overflows the screen.
+
+## 11.18.1
+- **FIX**(filter-editor): Ensure that the applied filters can also be removed.
+
+## 11.18.0
+- **FEAT**(filter-editor): Restore previously applied filter when `enableMultiSelection` is disabled, allowing users to toggle between filters instant of stacking filters.
+
+## 11.17.0
+- **FEAT**(paint-editor): Add hexagon shape tool. More details in PR [#738](https://github.com/hm21/pro_image_editor/pull/738).
+
+## 11.16.0
+- **FIX**(text-editor): Persist text shadow properties when exporting and importing state history. More details in PR [#733](https://github.com/hm21/pro_image_editor/pull/733).
+
+## 11.15.6
+- **FEAT**(text-editor): Add an optional background and borders to the text editor input field. More details in PR [#735](https://github.com/hm21/pro_image_editor/pull/735).
+
+## 11.15.5
+- **FEAT**(network-image): Added optional `networkHeaders` to the `EditorImage`. More details in PR [#729](https://github.com/hm21/pro_image_editor/pull/729).
+
+## 11.15.4
+- **FIX**(widget-layer): Resolve the issue of the optional `width` being applied incorrectly.
+
+## 11.15.3
+- **FEAT**(widget-layer): Add optional `width` property.
+
+## 11.15.2
+- **FEAT**(crop-rotate-editor): Add new callback `onTransformUpdateEnd` that returns all transformation changes whenever a value in the crop-rotate editor is modified.
+
+## 11.15.1
+- **FEAT**(text-editor): Add config `enableAutoWrapOnLayer` to the `TextEditorConfigs` which allows for deciding whether the layer applies the editor's auto wrapping or not. More details in PR [#720](https://github.com/hm21/pro_image_editor/pull/720).
+
+## 11.15.0
+- **FEAT**(crop-editor): Add `setScale` method to cropRotateEditor for programmatically setting the scale factor.
+
+## 11.14.2
+- **FIX**(main-editor): Resolve issue where `onLayerTapUp` is never called.
+- **FIX**(main-editor): Prevent the 'getSelectedLayer' function from throwing an exception when a layer is not found.
+
 ## 11.14.1
 - **FIX**(main-editor): Prevent dual editor opening (paint and text) when a text layer that is inside a paint layer is tapped with Apple pencil.
 

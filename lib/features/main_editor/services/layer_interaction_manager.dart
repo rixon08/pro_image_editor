@@ -105,6 +105,15 @@ class LayerInteractionManager {
   /// Offset of the vertical alignment line relative to the editor center.
   Offset verticalGuideOffset = Offset.zero;
 
+  /// Whether the currently visible vertical guide is an app-defined custom
+  /// guide (drawn with [HelperLineStyle.customGuideColor]) rather than a
+  /// layer-alignment guide.
+  bool isVerticalGuideCustom = false;
+
+  /// Whether the currently visible horizontal guide is an app-defined custom
+  /// guide.
+  bool isHorizontalGuideCustom = false;
+
   /// Flag indicating if rotation helper lines have started.
   bool _rotationStartedHelper = false;
 
@@ -353,7 +362,7 @@ class LayerInteractionManager {
     } else if (originalLayer is PaintLayer) {
       return PaintLayer(
         id: originalLayer.id,
-        item: originalLayer.item,
+        items: [...originalLayer.items],
         rawSize: originalLayer.rawSize,
         opacity: originalLayer.opacity,
         key: originalLayer.key,
@@ -419,13 +428,42 @@ class LayerInteractionManager {
   /// Last recorded Y-axis position for layers.
   LayerLastPosition lastPositionY = LayerLastPosition.center;
 
+  /// Local offset of the edge that was closest to the vertical center line in
+  /// the previous move frame. Used to detect when the closest edge switches so
+  /// the center-line snap is not falsely triggered by the resulting jump in the
+  /// tracked position.
+  double? _activeClosestLocalOffsetX;
+
+  /// Local offset of the edge that was closest to the horizontal center line in
+  /// the previous move frame.
+  double? _activeClosestLocalOffsetY;
+
   Offset? _rotateScaleButtonStartPosition;
   final _horizontalSnapHelper = _LayerAlignGuideHelper();
   final _verticalSnapHelper = _LayerAlignGuideHelper();
 
+  /// Whether [_updateAlignmentGuides] has set up its per-drag state yet.
+  bool _alignmentGuidesInitialized = false;
+
+  /// X-axis snap targets the active layer already coincided with when the drag
+  /// started. They stay suppressed until the layer's nearest edge moves clear
+  /// (farther than the release threshold), so a layer lifted off a pile of
+  /// overlapping layers isn't trapped by their coincident alignment guides.
+  final Set<double> _heldAlignXTargets = {};
+
+  /// Y-axis counterpart of [_heldAlignXTargets].
+  final Set<double> _heldAlignYTargets = {};
+
+  /// Optional override for helper line configuration at runtime.
+  ///
+  /// When set, this takes precedence over [configs.helperLines], allowing
+  /// helper lines to be toggled without recreating the editor widget.
+  HelperLineConfigs? helperLinesOverride;
+
   /// Configuration settings for displaying and managing helper lines within
   /// the editor.
-  HelperLineConfigs get helperLineConfigs => configs.helperLines;
+  HelperLineConfigs get helperLineConfigs =>
+      helperLinesOverride ?? configs.helperLines;
 
   /// Resets the state of the layer interaction manager by:
   ///
@@ -450,6 +488,122 @@ class LayerInteractionManager {
       return configs.paintEditor.layerFractionalOffset;
     }
     return const Offset(-0.5, -0.5);
+  }
+
+  /// Returns the anchor whose position sits closest to the center line
+  /// (position `0`).
+  _LayerSnapAnchor _closestAnchor(List<_LayerSnapAnchor> anchors) {
+    return anchors.reduce(
+      (a, b) => a.position.abs() <= b.position.abs() ? a : b,
+    );
+  }
+
+  /// Returns the axis-aligned bounding size of [size] rotated by [rotation]
+  /// (radians). Equals [size] when the rotation is a multiple of 180°.
+  Size _rotatedBoundingSize(Size size, double rotation) {
+    if (rotation == 0) return size;
+    final double cosR = cos(rotation).abs();
+    final double sinR = sin(rotation).abs();
+    return Size(
+      size.width * cosR + size.height * sinR,
+      size.width * sinR + size.height * cosR,
+    );
+  }
+
+  /// Layer types that expose their edges - not just their center - as snap
+  /// anchors.
+  ///
+  /// Text and paint layers can be aligned by their visible edges (left/center/
+  /// right and top/center/bottom); all other layer types expose only their
+  /// configured center anchor.
+  bool _supportsEdgeSnapping(Layer layer) =>
+      layer is TextLayer || layer is PaintLayer;
+
+  /// Returns the candidate horizontal snap anchors for [layer] in
+  /// center-relative editor coordinates.
+  ///
+  /// Layers that support edge snapping expose their left, center and right
+  /// edges; all others expose only their configured anchor.
+  List<_LayerSnapAnchor> _horizontalSnapAnchors(Layer layer) {
+    final fractionalOffset = _getFractionalLayerOffset(layer);
+    final double center = layer
+        .computeOffsetFromCenterFraction(fractionalOffset)
+        .dx;
+    final double localCenter = layer
+        .computeLocalCenterOffset(fractionalOffset)
+        .dx;
+
+    final centerAnchor = _LayerSnapAnchor(
+      position: center,
+      localOffset: localCenter,
+    );
+
+    if (!_supportsEdgeSnapping(layer)) return [centerAnchor];
+
+    // [renderSize] already reflects the on-screen (scaled) size - the layer's
+    // content is rendered at its scaled size, not scaled by a Transform - so it
+    // must not be multiplied by [scale] again.
+    final size = layer.renderSize;
+    if (size == null || size.isEmpty) return [centerAnchor];
+
+    // Use the rotated axis-aligned bounding box so the edges still match a
+    // rotated layer (collapses to width/2 when the layer is not rotated).
+    final double halfWidth =
+        _rotatedBoundingSize(size, layer.rotation).width / 2;
+    return [
+      _LayerSnapAnchor(
+        position: center - halfWidth,
+        localOffset: localCenter - halfWidth,
+      ),
+      centerAnchor,
+      _LayerSnapAnchor(
+        position: center + halfWidth,
+        localOffset: localCenter + halfWidth,
+      ),
+    ];
+  }
+
+  /// Returns the candidate vertical snap anchors for [layer] in center-relative
+  /// editor coordinates.
+  ///
+  /// Layers that support edge snapping expose their top, center and bottom
+  /// edges; all others expose only their configured anchor.
+  List<_LayerSnapAnchor> _verticalSnapAnchors(Layer layer) {
+    final fractionalOffset = _getFractionalLayerOffset(layer);
+    final double center = layer
+        .computeOffsetFromCenterFraction(fractionalOffset)
+        .dy;
+    final double localCenter = layer
+        .computeLocalCenterOffset(fractionalOffset)
+        .dy;
+
+    final centerAnchor = _LayerSnapAnchor(
+      position: center,
+      localOffset: localCenter,
+    );
+
+    if (!_supportsEdgeSnapping(layer)) return [centerAnchor];
+
+    // [renderSize] already reflects the on-screen (scaled) size, so it must not
+    // be multiplied by [scale] again.
+    final size = layer.renderSize;
+    if (size == null || size.isEmpty) return [centerAnchor];
+
+    // Use the rotated axis-aligned bounding box so the edges still match a
+    // rotated layer (collapses to height/2 when the layer is not rotated).
+    final double halfHeight =
+        _rotatedBoundingSize(size, layer.rotation).height / 2;
+    return [
+      _LayerSnapAnchor(
+        position: center - halfHeight,
+        localOffset: localCenter - halfHeight,
+      ),
+      centerAnchor,
+      _LayerSnapAnchor(
+        position: center + halfHeight,
+        localOffset: localCenter + halfHeight,
+      ),
+    ];
   }
 
   /// Determines if layers are selectable based on the configuration and device
@@ -499,10 +653,7 @@ class LayerInteractionManager {
     /// Calculates the scale factor based on the movement of a button.
     /// [oldPosition] is the initial button position,
     /// [newPosition] is the final button position.
-    double calculateScale(
-      Offset oldPosition,
-      Offset newPosition,
-    ) {
+    double calculateScale(Offset oldPosition, Offset newPosition) {
       // Calculate distances from the origin to the old and new positions
       double oldDistance = (oldPosition).distance;
       double newDistance = (newPosition).distance;
@@ -544,7 +695,8 @@ class LayerInteractionManager {
       _rotateScaleButtonStartPosition ??= touchPositionFromLayerCenter;
 
       if (layer.interaction.enableScale) {
-        layer.scale = _getLayerBaseScale(layer.id) *
+        layer.scale =
+            _getLayerBaseScale(layer.id) *
             calculateScale(
               _rotateScaleButtonStartPosition!,
               touchPositionFromLayerCenter,
@@ -553,7 +705,8 @@ class LayerInteractionManager {
       }
 
       if (layer.interaction.enableRotate) {
-        layer.rotation = _getLayerBaseAngle(layer.id) +
+        layer.rotation =
+            _getLayerBaseAngle(layer.id) +
             calculateRotation(
               _rotateScaleButtonStartPosition!,
               touchPositionFromLayerCenter,
@@ -579,6 +732,7 @@ class LayerInteractionManager {
     required GlobalKey removeAreaKey,
     required Function(bool value) onHoveredRemoveChanged,
     required StreamController<void> helperLineCtrl,
+    required Size editorBodySize,
   }) {
     if (_activeScale) return;
 
@@ -595,8 +749,6 @@ class LayerInteractionManager {
     for (Layer layer in selectedLayers) {
       if (!layer.interaction.enableMove) continue;
 
-      Offset fractionalOffset = _getFractionalLayerOffset(layer);
-
       layer.offset = Offset(
         layer.offset.dx + detail.focalPointDelta.dx / editorScaleFactor,
         layer.offset.dy + detail.focalPointDelta.dy / editorScaleFactor,
@@ -607,22 +759,37 @@ class LayerInteractionManager {
         continue;
       }
 
-      final Offset localPointFromCenter =
-          layer.computeLocalCenterOffset(fractionalOffset);
-      final Offset layerCenterOffset =
-          layer.computeOffsetFromCenterFraction(fractionalOffset);
+      /// Text and paint layers expose their edges as snap anchors; the edge
+      /// currently closest to a center line is the one that snaps to it. The
+      /// same closest anchor is computed in [onScaleStart] so the snapping
+      /// hysteresis starts from a consistent state (avoiding an immediate
+      /// jump).
+      final closestX = _closestAnchor(_horizontalSnapAnchors(layer));
+      final closestY = _closestAnchor(_verticalSnapAnchors(layer));
+
+      /// When the closest edge switches (e.g. from the left edge to the center)
+      /// the tracked position flips discontinuously; suppress a new snap on
+      /// that frame so only a genuine crossing snaps to the center line.
+      final bool anchorSwitchedX =
+          _activeClosestLocalOffsetX != null &&
+          _activeClosestLocalOffsetX != closestX.localOffset;
+      final bool anchorSwitchedY =
+          _activeClosestLocalOffsetY != null &&
+          _activeClosestLocalOffsetY != closestY.localOffset;
+      _activeClosestLocalOffsetX = closestX.localOffset;
+      _activeClosestLocalOffsetY = closestY.localOffset;
 
       final releaseThreshold = helperLineConfigs.releaseThreshold;
       bool hasLineHit = false;
-      double posX = layerCenterOffset.dx;
-      double posY = layerCenterOffset.dy;
+      double posX = closestX.position;
+      double posY = closestY.position;
 
       bool hitAreaX =
           detail.focalPoint.dx >= snapStartPosX - releaseThreshold &&
-              detail.focalPoint.dx <= snapStartPosX + releaseThreshold;
+          detail.focalPoint.dx <= snapStartPosX + releaseThreshold;
       bool hitAreaY =
           detail.focalPoint.dy >= snapStartPosY - releaseThreshold &&
-              detail.focalPoint.dy <= snapStartPosY + releaseThreshold;
+          detail.focalPoint.dy <= snapStartPosY + releaseThreshold;
 
       bool helperGoNearLineLeft =
           posX >= 0 && lastPositionX == LayerLastPosition.left;
@@ -635,7 +802,8 @@ class LayerInteractionManager {
 
       /// Calc vertical helper line
       if (helperLineConfigs.showVerticalLine) {
-        if ((!showVerticalHelperLine &&
+        if ((!anchorSwitchedX &&
+                !showVerticalHelperLine &&
                 (helperGoNearLineLeft || helperGoNearLineRight)) ||
             (showVerticalHelperLine && hitAreaX)) {
           if (!showVerticalHelperLine) {
@@ -643,21 +811,20 @@ class LayerInteractionManager {
             snapStartPosX = detail.focalPoint.dx;
           }
           showVerticalHelperLine = true;
-          layer.offset = Offset(
-            -localPointFromCenter.dx,
-            layer.offset.dy,
-          );
+          layer.offset = Offset(-closestX.localOffset, layer.offset.dy);
           lastPositionX = LayerLastPosition.center;
         } else {
           showVerticalHelperLine = false;
-          lastPositionX =
-              posX <= 0 ? LayerLastPosition.left : LayerLastPosition.right;
+          lastPositionX = posX <= 0
+              ? LayerLastPosition.left
+              : LayerLastPosition.right;
         }
       }
 
       if (helperLineConfigs.showHorizontalLine) {
         /// Calc horizontal helper line
-        if ((!showHorizontalHelperLine &&
+        if ((!anchorSwitchedY &&
+                !showHorizontalHelperLine &&
                 (helperGoNearLineTop || helperGoNearLineBottom)) ||
             (showHorizontalHelperLine && hitAreaY)) {
           if (!showHorizontalHelperLine) {
@@ -665,15 +832,13 @@ class LayerInteractionManager {
             snapStartPosY = detail.focalPoint.dy;
           }
           showHorizontalHelperLine = true;
-          layer.offset = Offset(
-            layer.offset.dx,
-            -localPointFromCenter.dy,
-          );
+          layer.offset = Offset(layer.offset.dx, -closestY.localOffset);
           lastPositionY = LayerLastPosition.center;
         } else {
           showHorizontalHelperLine = false;
-          lastPositionY =
-              posY <= 0 ? LayerLastPosition.top : LayerLastPosition.bottom;
+          lastPositionY = posY <= 0
+              ? LayerLastPosition.top
+              : LayerLastPosition.bottom;
         }
       }
 
@@ -683,7 +848,7 @@ class LayerInteractionManager {
         activeLayer: layer,
         helperLineCtrl: helperLineCtrl,
         editorScaleFactor: editorScaleFactor,
-        fractionalOffset: fractionalOffset,
+        editorBodySize: editorBodySize,
       );
 
       if (hasLineHit) {
@@ -797,8 +962,9 @@ class LayerInteractionManager {
 
         final Offset fractionalOffset = _getFractionalLayerOffset(layer);
         layer.computeLocalCenterOffset(fractionalOffset);
-        final Offset layerCenterOffset =
-            layer.computeOffsetFromCenterFraction(fractionalOffset);
+        final Offset layerCenterOffset = layer.computeOffsetFromCenterFraction(
+          fractionalOffset,
+        );
 
         double posY = layerCenterOffset.dy;
         double posX = layerCenterOffset.dx;
@@ -826,6 +992,12 @@ class LayerInteractionManager {
     snapStartPosX = details.focalPoint.dx;
     snapStartPosY = details.focalPoint.dy;
 
+    _alignmentGuidesInitialized = false;
+    _heldAlignXTargets.clear();
+    _heldAlignYTargets.clear();
+    _horizontalSnapHelper.reset();
+    _verticalSnapHelper.reset();
+
     for (Layer layer in selectedLayers) {
       _baseScaleFactor[layer.id] = layer.scale;
       _baseAngleFactor[layer.id] = layer.rotation;
@@ -833,24 +1005,28 @@ class LayerInteractionManager {
       _snapLastRotation[layer.id] = _getLayerSnapStartRotation(layer.id);
       reset();
 
-      final fractionOffset = _getFractionalLayerOffset(layer);
-      final centerOffset =
-          layer.computeOffsetFromCenterFraction(fractionOffset);
-      double posX = centerOffset.dx;
-      double posY = centerOffset.dy;
+      // Initialize the snap hysteresis from the same closest edge that
+      // [calculateMovement] evaluates, so dragging never starts with an
+      // immediate jump to a center line.
+      final closestX = _closestAnchor(_horizontalSnapAnchors(layer));
+      final closestY = _closestAnchor(_verticalSnapAnchors(layer));
+      double posX = closestX.position;
+      double posY = closestY.position;
+      _activeClosestLocalOffsetX = closestX.localOffset;
+      _activeClosestLocalOffsetY = closestY.localOffset;
 
       final releaseThreshold = helperLineConfigs.releaseThreshold;
 
       lastPositionY = posY <= -releaseThreshold
           ? LayerLastPosition.top
           : posY >= releaseThreshold
-              ? LayerLastPosition.bottom
-              : LayerLastPosition.center;
+          ? LayerLastPosition.bottom
+          : LayerLastPosition.center;
       lastPositionX = posX <= -releaseThreshold
           ? LayerLastPosition.left
           : posX >= releaseThreshold
-              ? LayerLastPosition.right
-              : LayerLastPosition.center;
+          ? LayerLastPosition.right
+          : LayerLastPosition.center;
     }
   }
 
@@ -870,8 +1046,15 @@ class LayerInteractionManager {
     showRotationHelperLine = false;
     isVerticalGuideVisible = false;
     isHorizontalGuideVisible = false;
+    isVerticalGuideCustom = false;
+    isHorizontalGuideCustom = false;
     showHelperLines = false;
     hoverRemoveBtn = false;
+    _activeClosestLocalOffsetX = null;
+    _activeClosestLocalOffsetY = null;
+    _alignmentGuidesInitialized = false;
+    _heldAlignXTargets.clear();
+    _heldAlignYTargets.clear();
   }
 
   /// Rotate a layer.
@@ -950,10 +1133,7 @@ class LayerInteractionManager {
       var initialIconX = (layer.offset.dx - paddingLeft) * scaleX;
       var initialIconY = (layer.offset.dy - paddingTop) * scaleX;
       layer
-        ..offset = Offset(
-          initialIconX,
-          initialIconY,
-        )
+        ..offset = Offset(initialIconX, initialIconY)
         ..scale *= scale;
       return true;
     }
@@ -978,18 +1158,12 @@ class LayerInteractionManager {
       } else {
         layer.flipX = !layer.flipX;
       }
-      layer.offset = Offset(
-        imageWidth - layer.offset.dx,
-        layer.offset.dy,
-      );
+      layer.offset = Offset(imageWidth - layer.offset.dx, layer.offset.dy);
     }
     if (flipX) {
       layer
         ..flipX = !layer.flipX
-        ..offset = Offset(
-          layer.offset.dx,
-          imageHeight - layer.offset.dy,
-        );
+        ..offset = Offset(layer.offset.dx, imageHeight - layer.offset.dy);
     }
   }
 
@@ -1023,9 +1197,11 @@ class LayerInteractionManager {
     required ScaleUpdateDetails detail,
     required StreamController<void> helperLineCtrl,
     required double editorScaleFactor,
-    required Offset fractionalOffset,
+    required Size editorBodySize,
   }) {
-    if (!helperLineConfigs.showLayerAlignLine) return;
+    final showLayerAlign = helperLineConfigs.showLayerAlignLine;
+    final customGuides = helperLineConfigs.customGuides;
+    if (!showLayerAlign && customGuides.isEmpty) return;
 
     final snapThreshold = 3.0 / editorScaleFactor;
     final releaseThreshold = helperLineConfigs.releaseThreshold;
@@ -1037,103 +1213,183 @@ class LayerInteractionManager {
     isHorizontalGuideVisible = false;
     isVerticalGuideVisible = false;
 
-    Offset? horizontalOffset;
-    Offset? verticalOffset;
+    final xTargets = <_SnapGuideTarget>[];
+    final yTargets = <_SnapGuideTarget>[];
 
-    final Offset localPointFromCenter =
-        activeLayer.computeLocalCenterOffset(fractionalOffset);
-    final Offset layerCenterOffset =
-        activeLayer.computeOffsetFromCenterFraction(fractionalOffset);
-
-    List<Offset> uniqueDxOffsets = [];
-    List<Offset> uniqueDyOffsets = [];
-    final seenDx = <double>{};
-    final seenDy = <double>{};
-
-    bool isSimilar(Set<double> seen, double value, double threshold) {
-      return seen.any((v) => (v - value).abs() < threshold);
+    void addTarget(List<_SnapGuideTarget> list, double pos, bool isCustom) {
+      if (list.any((t) => (t.position - pos).abs() < snapThreshold)) return;
+      list.add(_SnapGuideTarget(position: pos, isCustom: isCustom));
     }
 
-    for (final layer in layerList) {
-      if (layer == activeLayer) continue;
-      final centerOffset = layer.computeOffsetFromCenterFraction(
-        _getFractionalLayerOffset(layer),
+    // App-defined custom guides take priority over layer-alignment guides.
+    final halfWidth = editorBodySize.width / 2;
+    final halfHeight = editorBodySize.height / 2;
+    for (final guide in customGuides) {
+      final pos = guide.resolvePosition(editorBodySize);
+      if (guide.axis == Axis.vertical) {
+        addTarget(xTargets, pos - halfWidth, true);
+      } else {
+        addTarget(yTargets, pos - halfHeight, true);
+      }
+    }
+
+    if (showLayerAlign) {
+      for (final layer in layerList) {
+        if (layer == activeLayer) continue;
+        for (final anchor in _horizontalSnapAnchors(layer)) {
+          addTarget(xTargets, anchor.position, false);
+        }
+        for (final anchor in _verticalSnapAnchors(layer)) {
+          addTarget(yTargets, anchor.position, false);
+        }
+      }
+    }
+
+    final activeXAnchors = _horizontalSnapAnchors(activeLayer);
+    final activeYAnchors = _verticalSnapAnchors(activeLayer);
+
+    if (!_alignmentGuidesInitialized) {
+      _alignmentGuidesInitialized = true;
+      // Remember the targets the active layer already coincides with when the
+      // drag begins, so they don't immediately trap it. Without this a layer
+      // that shares its position with others (e.g. a stack of overlapping
+      // layers) is held in place by their coincident guides and can't be
+      // dragged away until the pointer travels past every anchor.
+      _heldAlignXTargets
+        ..clear()
+        ..addAll(
+          xTargets
+              .where(
+                (t) => activeXAnchors.any(
+                  (a) => (a.position - t.position).abs() <= snapThreshold,
+                ),
+              )
+              .map((t) => t.position),
+        );
+      _heldAlignYTargets
+        ..clear()
+        ..addAll(
+          yTargets
+              .where(
+                (t) => activeYAnchors.any(
+                  (a) => (a.position - t.position).abs() <= snapThreshold,
+                ),
+              )
+              .map((t) => t.position),
+        );
+    }
+
+    _SnapGuideTarget? matchedX;
+    _LayerSnapAnchor? matchedXAnchor;
+    for (final target in xTargets) {
+      // Snap the active layer's edge that sits closest to this target.
+      final anchor = activeXAnchors.reduce(
+        (a, b) =>
+            (a.position - target.position).abs() <=
+                (b.position - target.position).abs()
+            ? a
+            : b,
       );
 
-      final dx = centerOffset.dx;
-      final dy = centerOffset.dy;
+      final double distanceX = (anchor.position - target.position).abs();
 
-      if (!isSimilar(seenDx, dx, snapThreshold)) {
-        seenDx.add(dx);
-        uniqueDxOffsets.add(centerOffset);
+      // A target the layer already sat on when the drag began stays suppressed
+      // until the layer moves clear of it, so overlapping layers can be pulled
+      // apart instead of being trapped by their coincident guides. Once clear,
+      // the target re-arms and snapping works normally on re-approach.
+      if (_heldAlignXTargets.contains(target.position)) {
+        if (distanceX > releaseThreshold) {
+          _heldAlignXTargets.remove(target.position);
+        } else {
+          continue;
+        }
       }
 
-      if (!isSimilar(seenDy, dy, snapThreshold)) {
-        seenDy.add(dy);
-        uniqueDyOffsets.add(centerOffset);
-      }
-    }
-
-    for (final layerOffset in uniqueDxOffsets) {
-      if (verticalOffset != null) break;
-
-      final dx = (layerOffset.dx - layerCenterOffset.dx).abs();
-
-      // Vertical snapping (dx axis)
-      if (dx <= snapThreshold &&
+      if (distanceX <= snapThreshold &&
           _verticalSnapHelper.maybeSnap(
             focal: detail.focalPoint.dx,
             focalDelta: detail.focalPointDelta.dx,
-            offset: layerOffset,
+            // Encode the snapping edge so every edge can reach the same target.
+            offset: Offset(target.position, anchor.localOffset),
             threshold: snapThreshold,
             releaseThreshold: releaseThreshold,
             positiveDirection: LayerLastPosition.left,
             negativeDirection: LayerLastPosition.right,
           )) {
-        verticalOffset = layerOffset;
+        matchedX = target;
+        matchedXAnchor = anchor;
+        break;
       }
     }
 
-    for (final layerOffset in uniqueDyOffsets) {
-      if (horizontalOffset != null) break;
+    _SnapGuideTarget? matchedY;
+    _LayerSnapAnchor? matchedYAnchor;
+    for (final target in yTargets) {
+      // Snap the active layer's edge that sits closest to this target.
+      final anchor = activeYAnchors.reduce(
+        (a, b) =>
+            (a.position - target.position).abs() <=
+                (b.position - target.position).abs()
+            ? a
+            : b,
+      );
 
-      final dy = (layerOffset.dy - layerCenterOffset.dy).abs();
+      final double distanceY = (anchor.position - target.position).abs();
 
-      // Horizontal snapping (dy axis)
-      if (dy <= snapThreshold &&
+      // See the x-axis loop above: suppress targets the layer already sat on so
+      // stacked/overlapping layers can be separated.
+      if (_heldAlignYTargets.contains(target.position)) {
+        if (distanceY > releaseThreshold) {
+          _heldAlignYTargets.remove(target.position);
+        } else {
+          continue;
+        }
+      }
+
+      if (distanceY <= snapThreshold &&
           _horizontalSnapHelper.maybeSnap(
             focal: detail.focalPoint.dy,
             focalDelta: detail.focalPointDelta.dy,
-            offset: layerOffset,
+            // Encode the snapping edge so every edge can reach the same target.
+            offset: Offset(anchor.localOffset, target.position),
             threshold: snapThreshold,
             releaseThreshold: releaseThreshold,
             positiveDirection: LayerLastPosition.top,
             negativeDirection: LayerLastPosition.bottom,
           )) {
-        horizontalOffset = layerOffset;
+        matchedY = target;
+        matchedYAnchor = anchor;
+        break;
       }
     }
 
     // Handle vertical snapping
-    if (verticalOffset != null) {
-      verticalGuideOffset = verticalOffset;
+    if (matchedX != null) {
+      verticalGuideOffset = Offset(matchedX.position, 0);
       isVerticalGuideVisible = true;
+      isVerticalGuideCustom = matchedX.isCustom;
 
       activeLayer.offset = Offset(
-          verticalOffset.dx - localPointFromCenter.dx, activeLayer.offset.dy);
+        matchedX.position - matchedXAnchor!.localOffset,
+        activeLayer.offset.dy,
+      );
     }
 
     // Handle horizontal snapping
-    if (horizontalOffset != null) {
-      horizontalGuideOffset = horizontalOffset;
+    if (matchedY != null) {
+      horizontalGuideOffset = Offset(0, matchedY.position);
       isHorizontalGuideVisible = true;
+      isHorizontalGuideCustom = matchedY.isCustom;
 
       activeLayer.offset = Offset(
-          activeLayer.offset.dx, horizontalOffset.dy - localPointFromCenter.dy);
+        activeLayer.offset.dx,
+        matchedY.position - matchedYAnchor!.localOffset,
+      );
     }
 
     // Notify UI only if something changed
-    final hasChanged = isHorizontalGuideVisible != wasHorizontalGuideVisible ||
+    final hasChanged =
+        isHorizontalGuideVisible != wasHorizontalGuideVisible ||
         isVerticalGuideVisible != wasVerticalGuideVisible;
 
     if (hasChanged) {
@@ -1147,10 +1403,41 @@ class LayerInteractionManager {
   }
 }
 
+/// A single snap anchor of a layer, expressed in center-relative editor
+/// coordinates together with the offset of that anchor from `layer.offset`.
+class _LayerSnapAnchor {
+  const _LayerSnapAnchor({required this.position, required this.localOffset});
+
+  /// Anchor position in center-relative editor coordinates.
+  final double position;
+
+  /// Offset of the anchor from `layer.offset` along the same axis.
+  final double localOffset;
+}
+
+/// A snap target line in center-relative editor coordinates.
+class _SnapGuideTarget {
+  const _SnapGuideTarget({required this.position, required this.isCustom});
+
+  /// Target position in center-relative editor coordinates.
+  final double position;
+
+  /// Whether this target originates from an app-defined custom guide.
+  final bool isCustom;
+}
+
 class _LayerAlignGuideHelper {
   LayerLastPosition _lastSnapPosition = LayerLastPosition.center;
   Offset _lastSnapOffset = Offset.infinite;
   double? _lastSnapFocal;
+
+  /// Clears the snapping hysteresis so a new drag gesture starts fresh and
+  /// doesn't inherit stale state from a previous interaction.
+  void reset() {
+    _lastSnapPosition = LayerLastPosition.center;
+    _lastSnapOffset = Offset.infinite;
+    _lastSnapFocal = null;
+  }
 
   /// Returns true if snapping should occur, otherwise false
   bool maybeSnap({
@@ -1165,8 +1452,9 @@ class _LayerAlignGuideHelper {
     final diff = (_lastSnapFocal ?? focal) - focal;
 
     if (_lastSnapFocal == null || diff.abs() < releaseThreshold) {
-      final newPosition =
-          focalDelta > 0 ? positiveDirection : negativeDirection;
+      final newPosition = focalDelta > 0
+          ? positiveDirection
+          : negativeDirection;
 
       if (newPosition != _lastSnapPosition || _lastSnapOffset != offset) {
         _lastSnapFocal ??= focal;
@@ -1175,8 +1463,9 @@ class _LayerAlignGuideHelper {
         return true;
       }
     } else if (diff.abs() > releaseThreshold) {
-      _lastSnapPosition =
-          focal > _lastSnapFocal! ? positiveDirection : negativeDirection;
+      _lastSnapPosition = focal > _lastSnapFocal!
+          ? positiveDirection
+          : negativeDirection;
       _lastSnapFocal = null;
     }
 

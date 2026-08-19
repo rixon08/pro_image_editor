@@ -18,10 +18,7 @@ extension DoubleExtension on double {
   /// 12.0.safeMinClamp(2, 10); // returns 10.0
   /// ```
   double safeMinClamp(num lowerLimit, num upperLimit) {
-    return clamp(
-      min(lowerLimit, upperLimit),
-      upperLimit,
-    ).toDouble();
+    return clamp(min(lowerLimit, upperLimit), upperLimit).toDouble();
   }
 
   /// Clamps the double value between [lowerLimit] and [upperLimit],
@@ -36,10 +33,7 @@ extension DoubleExtension on double {
   /// 5.5.safeMaxClamp(2, 10); // returns 5.5
   /// ```
   double safeMaxClamp(num lowerLimit, num upperLimit) {
-    return clamp(
-      lowerLimit,
-      max(lowerLimit, upperLimit),
-    ).toDouble();
+    return clamp(lowerLimit, max(lowerLimit, upperLimit)).toDouble();
   }
 
   /// Converts the current double value to device pixels based on the device's
@@ -67,4 +61,10 @@ extension DoubleExtension on double {
 
     return safeParseDouble(toStringAsFixed(decimals));
   }
+
+  /// Converts the current double value from degrees to radians.
+  double get degToRad => this * (pi / 180.0);
+
+  /// Converts the current double value from radians to degrees.
+  double get radToDeg => this * (180.0 / pi);
 }

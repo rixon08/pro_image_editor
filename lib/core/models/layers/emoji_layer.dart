@@ -37,6 +37,14 @@ class EmojiLayer extends Layer {
     super.boxConstraints,
     super.key,
     super.groupId,
+    super.startTime,
+    super.endTime,
+    super.enterDuration,
+    super.exitDuration,
+    super.enterCurve,
+    super.exitCurve,
+    super.transitionBuilder,
+    super.animations,
   });
 
   /// Factory constructor for creating an EmojiLayer instance from a Layer
@@ -60,6 +68,13 @@ class EmojiLayer extends Layer {
       scale: layer.scale,
       meta: layer.meta,
       groupId: layer.groupId,
+      startTime: layer.startTime,
+      endTime: layer.endTime,
+      enterDuration: layer.enterDuration,
+      exitDuration: layer.exitDuration,
+      enterCurve: layer.enterCurve,
+      exitCurve: layer.exitCurve,
+      animations: layer.animations,
       emoji: map[keyConverter('emoji')],
       boxConstraints: layer.boxConstraints,
     );
@@ -117,6 +132,14 @@ class EmojiLayer extends Layer {
     BoxConstraints? boxConstraints,
     String? id,
     String? groupId,
+    Duration? startTime,
+    Duration? endTime,
+    Duration? enterDuration,
+    Duration? exitDuration,
+    Curve? enterCurve,
+    Curve? exitCurve,
+    LayerTimelineTransitionBuilder? transitionBuilder,
+    List<LayerAnimation>? animations,
   }) {
     return EmojiLayer(
       emoji: emoji ?? this.emoji,
@@ -130,6 +153,14 @@ class EmojiLayer extends Layer {
       boxConstraints: boxConstraints ?? this.boxConstraints,
       id: id ?? this.id,
       groupId: groupId ?? this.groupId,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      enterDuration: enterDuration ?? this.enterDuration,
+      exitDuration: exitDuration ?? this.exitDuration,
+      enterCurve: enterCurve ?? this.enterCurve,
+      exitCurve: exitCurve ?? this.exitCurve,
+      transitionBuilder: transitionBuilder ?? this.transitionBuilder,
+      animations: animations ?? this.animations,
     );
   }
 

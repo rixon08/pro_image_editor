@@ -21,7 +21,16 @@ class ExtendedInteractiveViewer extends StatefulWidget {
     this.onMatrix4Change,
     this.initialMatrix4,
     this.enableExternalGestureDetector = false,
+    this.clipBehavior = Clip.hardEdge,
   });
+
+  /// How to clip the child during zoom/pan.
+  ///
+  /// Defaults to [Clip.hardEdge], which confines the transformed child to the
+  /// viewport. Set to [Clip.none] to let the zoomed child overflow the
+  /// viewport (e.g. a video editor where the zoomed frame should extend over
+  /// the letterbox area).
+  final Clip clipBehavior;
 
   /// Configuration options that control zoom behavior and limits.
   ///
@@ -202,19 +211,15 @@ class ExtendedInteractiveViewerState extends State<ExtendedInteractiveViewer>
       ..translateByDouble(effectiveOffset.dx, effectiveOffset.dy, 0.0, 1.0)
       ..scaleByDouble(effectiveScale, effectiveScale, effectiveScale, 1.0);
 
-    final tween = Matrix4Tween(
-      begin: _transformCtrl.value,
-      end: targetMatrix,
-    );
+    final tween = Matrix4Tween(begin: _transformCtrl.value, end: targetMatrix);
 
     _animationCtrl
       ..duration = duration
       ..reset();
 
-    final animation = tween.animate(CurvedAnimation(
-      parent: _animationCtrl,
-      curve: curve,
-    ));
+    final animation = tween.animate(
+      CurvedAnimation(parent: _animationCtrl, curve: curve),
+    );
 
     void listener() {
       _transformCtrl.value = animation.value;
@@ -314,6 +319,7 @@ class ExtendedInteractiveViewerState extends State<ExtendedInteractiveViewer>
       onInteractionEnd: widget.onInteractionEnd,
       enableExternalGestureDetector: widget.enableExternalGestureDetector,
       invertTrackpadDirection: widget.zoomConfigs.invertTrackpadDirection,
+      clipBehavior: widget.clipBehavior,
       child: widget.child,
     );
   }

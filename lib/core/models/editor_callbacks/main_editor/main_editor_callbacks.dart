@@ -32,7 +32,6 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
     this.onEditorZoomScaleUpdate,
     this.onEditorZoomScaleEnd,
     this.onEscapeButton,
-    this.onKeyboardEvent,
     this.helperLines = const HelperLinesCallbacks(),
     this.onSelectedLayerChanged,
     this.onSelectedLayersChanged,
@@ -41,15 +40,19 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
     this.onLayerTapUp,
     this.onImportHistoryStart,
     this.onImportHistoryEnd,
+    this.onLayerInteractionEnd,
     this.onHoverRemoveAreaChange,
     this.onStateHistoryChange,
     this.onImageDecoded,
+    this.onEditTextLayer,
+    this.onCreateTextLayer,
     super.onInit,
     super.onAfterViewInit,
     super.onUpdateUI,
     super.onDone,
     super.onRedo,
     super.onUndo,
+    super.onKeyboardEvent,
   });
 
   /// Callback triggered when a layer receives a tap down event.
@@ -76,6 +79,13 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
   ///
   /// The [Layer] parameter provides information about the removed layer.
   final Function(Layer layer)? onRemoveLayer;
+
+  /// A callback triggered when a layer interaction (drag/scale/rotate) ends.
+  ///
+  /// The [List<Layer>] parameter provides the layers that were being
+  /// interacted with. This is useful for applying final adjustments like
+  /// snap-to-grid on release.
+  final Function(List<Layer> layers)? onLayerInteractionEnd;
 
   /// A callback function that is triggered when a sub-editor is opened.
   ///
@@ -107,10 +117,58 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
   /// Callback that is triggered whenever the state history of the editor
   /// changes.
   final Function(StateManager stateHistory, ProImageEditorState editor)?
-      onStateHistoryChange;
+  onStateHistoryChange;
 
   /// Callback that is triggered after the image has been successfully decoded.
   final Function()? onImageDecoded;
+
+  /// A callback function that allows opening a custom text editor when a
+  /// [TextLayer] is tapped.
+  ///
+  /// If this callback is provided and returns a non-null [TextLayer], the
+  /// returned layer will be used to update the existing layer. If the callback
+  /// returns `null`, no changes will be made.
+  ///
+  /// If this callback is not provided, the default text editor will be opened.
+  ///
+  /// Example usage:
+  /// ```dart
+  /// onEditTextLayer: (layer) async {
+  ///   // Open your custom text editor
+  ///   final result = await Navigator.push(
+  ///     context,
+  ///     MaterialPageRoute(
+  ///       builder: (context) => MyCustomTextEditor(layer: layer),
+  ///     ),
+  ///   );
+  ///   return result; // Return the updated TextLayer or null
+  /// },
+  /// ```
+  final Future<TextLayer?> Function(TextLayer layer)? onEditTextLayer;
+
+  /// A callback function that allows opening a custom text editor when
+  /// creating a new text layer.
+  ///
+  /// If this callback is provided and returns a non-null [TextLayer], the
+  /// returned layer will be added to the editor. If the callback returns
+  /// `null`, no layer will be added.
+  ///
+  /// If this callback is not provided, the default text editor will be opened.
+  ///
+  /// Example usage:
+  /// ```dart
+  /// onCreateTextLayer: () async {
+  ///   // Open your custom text editor for creating a new layer
+  ///   final result = await Navigator.push(
+  ///     context,
+  ///     MaterialPageRoute(
+  ///       builder: (context) => MyCustomTextEditor(),
+  ///     ),
+  ///   );
+  ///   return result; // Return the new TextLayer or null
+  /// },
+  /// ```
+  final Future<TextLayer?> Function()? onCreateTextLayer;
 
   /// A callback function that is triggered when the user `tap` on the body.
   final Function()? onTap;
@@ -129,24 +187,6 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
   /// By default it is null, which runs the default "close" behavior.
   final Function()? onEscapeButton;
 
-  /// Callback invoked when a keyboard event occurs.
-  ///
-  /// If this function returns `true`, the keyboard event will be consumed and
-  /// not propagated further. Returning `false` or `null` allows the event to
-  /// continue propagating.
-  ///
-  /// Example usage:
-  /// ```dart
-  /// onKeyboardEvent: (event) {
-  ///   if (event.logicalKey == LogicalKeyboardKey.escape) {
-  ///     // Handle Escape key and consume the event.
-  ///     return true;
-  ///   }
-  ///   return false; // Let other keys propagate.
-  /// },
-  /// ```
-  final bool Function(KeyEvent event)? onKeyboardEvent;
-
   /// Callback triggered when the import of the editor's history starts.
   ///
   /// [state] provides the current state of the ProImageEditor.
@@ -157,7 +197,7 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
   /// [state] provides the current state of the ProImageEditor.
   /// [import] contains information about the import operation.
   final Function(ProImageEditorState state, ImportStateHistory import)?
-      onImportHistoryStart;
+  onImportHistoryStart;
 
   /// Callback triggered when the import of the editor's history is done.
   ///
@@ -169,7 +209,7 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
   /// [state] provides the current state of the ProImageEditor.
   /// [import] contains information about the import operation.
   final Function(ProImageEditorState state, ImportStateHistory import)?
-      onImportHistoryEnd;
+  onImportHistoryEnd;
 
   /// A callback function that is triggered when a scaling gesture starts.
   ///
@@ -333,6 +373,15 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
     handleUpdateUI();
   }
 
+  /// Handles the end of a layer interaction (drag/scale/rotate).
+  ///
+  /// This method calls the [onLayerInteractionEnd] callback with the
+  /// provided [layers] and then calls [handleUpdateUI].
+  void handleLayerInteractionEnd(List<Layer> layers) {
+    onLayerInteractionEnd?.call(layers);
+    handleUpdateUI();
+  }
+
   /// Handles the opening of a sub-editor.
   ///
   /// This method calls the [onOpenSubEditor] callback with the provided
@@ -428,13 +477,16 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
     Function()? onRedo,
     Function()? onUndo,
     Function()? onImageDecoded,
+    Future<TextLayer?> Function(TextLayer layer)? onEditTextLayer,
+    Future<TextLayer?> Function()? onCreateTextLayer,
+    Function(List<Layer> layers)? onLayerInteractionEnd,
     Function(ProImageEditorState state, ImportStateHistory import)?
-        onImportHistoryStart,
+    onImportHistoryStart,
     Function(ProImageEditorState state, ImportStateHistory import)?
-        onImportHistoryEnd,
+    onImportHistoryEnd,
     Function(bool isPointerInside)? onHoverRemoveAreaChange,
     Function(StateManager stateHistory, ProImageEditorState editor)?
-        onStateHistoryChange,
+    onStateHistoryChange,
   }) {
     return MainEditorCallbacks(
       onLayerTapDown: onLayerTapDown ?? this.onLayerTapDown,
@@ -474,8 +526,12 @@ class MainEditorCallbacks extends StandaloneEditorCallbacks {
       onRedo: onRedo ?? this.onRedo,
       onUndo: onUndo ?? this.onUndo,
       onImageDecoded: onImageDecoded ?? this.onImageDecoded,
+      onEditTextLayer: onEditTextLayer ?? this.onEditTextLayer,
+      onCreateTextLayer: onCreateTextLayer ?? this.onCreateTextLayer,
       onImportHistoryStart: onImportHistoryStart ?? this.onImportHistoryStart,
       onImportHistoryEnd: onImportHistoryEnd ?? this.onImportHistoryEnd,
+      onLayerInteractionEnd:
+          onLayerInteractionEnd ?? this.onLayerInteractionEnd,
       onHoverRemoveAreaChange:
           onHoverRemoveAreaChange ?? this.onHoverRemoveAreaChange,
       onStateHistoryChange: onStateHistoryChange ?? this.onStateHistoryChange,

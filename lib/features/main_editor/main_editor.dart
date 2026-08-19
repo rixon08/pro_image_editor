@@ -25,12 +25,18 @@ import '/shared/mixins/editor_zoom.mixin.dart';
 import '/shared/services/content_recorder/widgets/content_recorder.dart';
 import '/shared/services/import_export/export_state_history.dart';
 import '/shared/services/layer_transform_generator.dart';
+import '/shared/utils/default_editor_theme.dart';
 import '/shared/utils/file_constructor_utils.dart';
 import '/shared/utils/transparent_image_generator_utils.dart';
 import '/shared/widgets/adaptive_dialog.dart';
 import '/shared/widgets/extended/interactive_viewer/extended_interactive_viewer.dart';
 import '/shared/widgets/screen_resize_detector.dart';
-import '../filter_editor/types/filter_matrix.dart';
+import '../audio_editor/audio_editor_page.dart';
+import '../audio_editor/models/audio_editor_response.dart';
+import '../audio_editor/widgets/audio_main_bottom_bar.dart';
+import '../clips_editor/models/video_clip_editor_response.dart';
+import '../clips_editor/pages/clips_editor_page.dart';
+import '../filter_editor/utils/merge_filter_states.dart';
 import '../filter_editor/widgets/filter_generator.dart';
 import '../paint_editor/models/paint_editor_response_model.dart';
 import '../paint_editor/widgets/paint_editor_layer_editor.dart';
@@ -42,6 +48,7 @@ import 'services/layer_copy_manager.dart';
 import 'services/layer_drag_selection_service.dart';
 import 'services/layer_interaction_manager.dart';
 import 'services/main_editor_state_history_service.dart';
+import 'services/paint_layer_merge_manager.dart';
 import 'services/sizes_manager.dart';
 import 'widgets/main_editor_interactive_content.dart';
 
@@ -100,10 +107,10 @@ class ProImageEditor extends StatefulWidget
     this.videoController,
     this.configs = const ProImageEditorConfigs(),
   }) : assert(
-          editorImage != null || videoController != null || blankSize != null,
-          'Either editorImage or videoController or blankSize must be '
-          'provided.',
-        );
+         editorImage != null || videoController != null || blankSize != null,
+         'Either editorImage or videoController or blankSize must be '
+         'provided.',
+       );
 
   /// This constructor creates a `ProImageEditor` widget configured to edit an
   /// image loaded from the specified `byteArray`.
@@ -210,6 +217,8 @@ class ProImageEditor extends StatefulWidget
   /// {@macro mainEditorConfigs}
   /// - `networkUrl` *(required)*: The URL from which the image should be
   /// loaded.
+  /// - `networkHeaders` *(optional)*: HTTP headers to include when fetching
+  /// the image (e.g., for authentication).
   ///
   /// Example usage:
   /// ```dart
@@ -221,12 +230,16 @@ class ProImageEditor extends StatefulWidget
   factory ProImageEditor.network(
     String networkUrl, {
     Key? key,
+    Map<String, String>? networkHeaders,
     ProImageEditorConfigs configs = const ProImageEditorConfigs(),
     required ProImageEditorCallbacks callbacks,
   }) {
     return ProImageEditor._(
       key: key,
-      editorImage: EditorImage(networkUrl: networkUrl),
+      editorImage: EditorImage(
+        networkUrl: networkUrl,
+        networkHeaders: networkHeaders,
+      ),
       configs: configs,
       callbacks: callbacks,
     );
@@ -289,6 +302,7 @@ class ProImageEditor extends StatefulWidget
     dynamic file,
     String? assetPath,
     String? networkUrl,
+    Map<String, String>? networkHeaders,
     EditorImage? editorImage,
     ProVideoController? videoController,
     ProImageEditorConfigs configs = const ProImageEditorConfigs(),
@@ -296,11 +310,13 @@ class ProImageEditor extends StatefulWidget
   }) {
     return ProImageEditor._(
       key: key,
-      editorImage: editorImage ??
+      editorImage:
+          editorImage ??
           EditorImage(
             byteArray: byteArray,
             file: file,
             networkUrl: networkUrl,
+            networkHeaders: networkHeaders,
             assetPath: assetPath,
           ),
       videoController: videoController,
@@ -398,6 +414,7 @@ class ProImageEditorState extends State<ProImageEditor>
         EditorZoomMixin {
   final _bottomBarKey = GlobalKey();
   final _removeAreaKey = GlobalKey();
+  final _navigatorKey = GlobalKey<NavigatorState>();
   final _backgroundImageColorFilterKey = GlobalKey<ColorFilterGeneratorState>();
   @override
   final interactiveViewer = GlobalKey<ExtendedInteractiveViewerState>();
@@ -415,11 +432,11 @@ class ProImageEditorState extends State<ProImageEditor>
   /// Helper class for managing interactions with layers in the editor.
   late final LayerInteractionManager layerInteractionManager =
       LayerInteractionManager(
-    onSelectedLayerChanged: mainEditorCallbacks?.onSelectedLayerChanged,
-    onSelectedLayersChanged: mainEditorCallbacks?.onSelectedLayersChanged,
-    helperLinesCallbacks: mainEditorCallbacks?.helperLines,
-    configs: configs,
-  );
+        onSelectedLayerChanged: mainEditorCallbacks?.onSelectedLayerChanged,
+        onSelectedLayersChanged: mainEditorCallbacks?.onSelectedLayersChanged,
+        helperLinesCallbacks: mainEditorCallbacks?.helperLines,
+        configs: configs,
+      );
   late final _mouseService = MouseService(
     configs: configs,
     interactionManager: layerInteractionManager,
@@ -503,10 +520,15 @@ class ProImageEditorState extends State<ProImageEditor>
   /// Returns the most recently selected layer, or `null` if no layer is
   /// selected.
   Layer? get selectedLayer => hasSelectedLayers
-      ? activeLayers.lastWhere(
-          (layer) =>
-              layerInteractionManager.selectedLayerIds.contains(layer.id),
-        )
+      ? () {
+          final mostRecentSelectedLayerIndex = activeLayers.lastIndexWhere(
+            (layer) =>
+                layerInteractionManager.selectedLayerIds.contains(layer.id),
+          );
+          return mostRecentSelectedLayerIndex >= 0
+              ? activeLayers[mostRecentSelectedLayerIndex]
+              : null;
+        }()
       : null;
 
   /// Returns a list of all currently selected layers.
@@ -528,8 +550,10 @@ class ProImageEditorState extends State<ProImageEditor>
   /// Determines whether redo actions can be performed on the current state.
   bool get canRedo => stateManager.canRedo;
 
+  ProVideoController? get _videoController => widget.videoController;
+
   /// Indicates whether video editor is enabled.
-  late final bool _isVideoEditor = widget.videoController != null;
+  late final bool _isVideoEditor = _videoController != null;
 
   /// Determines whether multi-select mode is always enabled.
   ///
@@ -560,11 +584,13 @@ class ProImageEditorState extends State<ProImageEditor>
 
   PointerEvent? _lastDownEvent;
   DateTime _tapDownTimestamp = DateTime.now();
+  final _audioBottomBarNotifier = ValueNotifier(false);
 
   @override
   void initState() {
     super.initState();
-    _initializeVideoEditor();
+    initializeVideoEditor();
+    _videoController?.resolutionNotifier.addListener(_onVideoResolutionChanged);
 
     _rebuildController = StreamController.broadcast();
     _controllers = MainEditorControllers(configs, callbacks, _isVideoEditor);
@@ -592,7 +618,6 @@ class ProImageEditorState extends State<ProImageEditor>
           ),
           blur: 0,
           layers: [],
-          filters: [],
           tuneAdjustments: [],
         ),
       );
@@ -612,8 +637,12 @@ class ProImageEditorState extends State<ProImageEditor>
 
   @override
   void dispose() {
+    _videoController?.resolutionNotifier.removeListener(
+      _onVideoResolutionChanged,
+    );
     _rebuildController.close();
     _controllers.dispose();
+    _audioBottomBarNotifier.dispose();
     layerInteractionManager.scaleDebounce.dispose();
     SystemChrome.setSystemUIOverlayStyle(
       _theme.brightness == Brightness.dark
@@ -672,6 +701,28 @@ class ProImageEditorState extends State<ProImageEditor>
     );
   }
 
+  Map<String, dynamic> _deepCopyMeta(Map<String, dynamic> source) {
+    return source.map((key, value) => MapEntry(key, _deepCopyValue(value)));
+  }
+
+  dynamic _deepCopyValue(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.fromEntries(
+        value.entries.map(
+          (entry) =>
+              MapEntry(entry.key.toString(), _deepCopyValue(entry.value)),
+        ),
+      );
+    }
+    if (value is List) {
+      return value.map(_deepCopyValue).toList();
+    }
+    if (value is Set) {
+      return value.map(_deepCopyValue).toSet();
+    }
+    return value;
+  }
+
   /// Adds a new state to the history with the given configuration and updates
   /// the state manager.
   ///
@@ -708,24 +759,35 @@ class ProImageEditorState extends State<ProImageEditor>
     List<Layer>? layers,
     Layer? newLayer,
     TransformConfigs? transformConfigs,
-    FilterMatrix? filters,
+    List<FilterState>? filters,
     List<TuneAdjustmentMatrix>? tuneAdjustments,
     double? blur,
+    Map<String, dynamic>? meta,
     bool heroScreenshotRequired = false,
     bool blockCaptureScreenshot = false,
   }) {
     List<Layer> activeLayerList = _layerCopyManager.copyLayerList(activeLayers);
+    final resolvedFilters = (filters ?? stateManager.activeFilters)
+        .map((item) => item.copy())
+        .toList();
+    final resolvedTuneAdjustments =
+        (tuneAdjustments ?? stateManager.activeTuneAdjustments)
+            .map((item) => item.copy())
+            .toList();
+    final resolvedMeta = _deepCopyMeta(meta ?? stateManager.activeMeta);
 
     stateManager.addHistory(
       EditorStateHistory(
         transformConfigs: transformConfigs,
         blur: blur,
-        layers: layers ??
+        layers:
+            layers ??
             (newLayer != null
                 ? [...activeLayerList, newLayer]
                 : activeLayerList),
-        filters: filters ?? [],
-        tuneAdjustments: tuneAdjustments ?? [],
+        filters: resolvedFilters,
+        tuneAdjustments: resolvedTuneAdjustments,
+        meta: resolvedMeta,
       ),
       historyLimit: stateHistoryConfigs.stateHistoryLimit,
       enableScreenshotLimit: imageGenerationConfigs.enableBackgroundGeneration,
@@ -776,6 +838,75 @@ class ProImageEditorState extends State<ProImageEditor>
         ..insert(index, layer),
     );
 
+    _controllers.uiLayerCtrl.add(null);
+  }
+
+  /// Updates the [startTime] and/or [endTime] of the layer at the given
+  /// [index] and records the change in the state history.
+  ///
+  /// Both [startTime] and [endTime] are optional. Only non-null values are
+  /// applied. This is primarily used by the video editor to define when a
+  /// layer is visible on the timeline.
+  ///
+  /// Pass [animations] to set the per-layer enter/leave animations (fade /
+  /// slide / scale). When non-empty, they take over from the legacy
+  /// [enterDuration] / [exitDuration] fade convenience.
+  void setLayerTimeline({
+    required int index,
+    Duration? startTime,
+    Duration? endTime,
+    Duration? enterDuration,
+    Duration? exitDuration,
+    Curve? enterCurve,
+    Curve? exitCurve,
+    LayerTimelineTransitionBuilder? transitionBuilder,
+    List<LayerAnimation>? animations,
+    Map<String, dynamic>? meta,
+    bool skipUpdateHistory = false,
+  }) {
+    final current = activeLayers[index];
+
+    // Early return if nothing would change.
+    if ((startTime == null || startTime == current.startTime) &&
+        (endTime == null || endTime == current.endTime) &&
+        (enterDuration == null || enterDuration == current.enterDuration) &&
+        (exitDuration == null || exitDuration == current.exitDuration) &&
+        (enterCurve == null || enterCurve == current.enterCurve) &&
+        (exitCurve == null || exitCurve == current.exitCurve) &&
+        (transitionBuilder == null ||
+            transitionBuilder == current.transitionBuilder) &&
+        (animations == null || listEquals(animations, current.animations)) &&
+        meta == null) {
+      return;
+    }
+
+    final List<Layer> layers;
+    final Layer layer;
+
+    if (skipUpdateHistory) {
+      layer = _layerCopyManager.copyLayer(activeLayers[index]);
+      activeLayers[index] = layer;
+      layers = activeLayers;
+    } else {
+      layers = _layerCopyManager.copyLayerList(activeLayers);
+      layer = layers[index];
+    }
+
+    if (startTime != null) layer.startTime = startTime;
+    if (endTime != null) layer.endTime = endTime;
+    if (enterDuration != null) layer.enterDuration = enterDuration;
+    if (exitDuration != null) layer.exitDuration = exitDuration;
+    if (enterCurve != null) layer.enterCurve = enterCurve;
+    if (exitCurve != null) layer.exitCurve = exitCurve;
+    if (transitionBuilder != null) layer.transitionBuilder = transitionBuilder;
+    if (animations != null) {
+      layer.animations = List<LayerAnimation>.of(animations);
+    }
+    if (meta != null) layer.meta = {...layer.meta ?? {}, ...meta};
+
+    if (!skipUpdateHistory) {
+      addHistory(layers: layers);
+    }
     _controllers.uiLayerCtrl.add(null);
   }
 
@@ -837,7 +968,8 @@ class ProImageEditorState extends State<ProImageEditor>
 
         final scaledSize = bodySize * scaleDelta;
 
-        final zoomOffset = Offset(
+        final zoomOffset =
+            Offset(
               scaledSize.width - bodySize.width,
               scaledSize.height - bodySize.height,
             ) /
@@ -886,27 +1018,177 @@ class ProImageEditorState extends State<ProImageEditor>
     setState(() {});
   }
 
-  void _initializeVideoEditor() async {
+  /// Removes the [FilterState] at the given [index] from the active filters
+  /// and records the change in the state history.
+  ///
+  /// Does nothing if [filter] is not found in the active filter list or
+  /// [index] is out of range.
+  ///
+  /// Either [filter] or [index] must be provided. If both are given, [index]
+  /// takes precedence.
+  ///
+  /// - [filter]: The [FilterState] instance to remove.
+  /// - [index]: Zero-based index of the filter to remove.
+  void removeFilter({FilterState? filter, int? index}) {
+    assert(
+      filter != null || index != null,
+      'Either filter or index must be provided.',
+    );
+    final filters = List<FilterState>.from(stateManager.activeFilters);
+    final i = index ?? (filter != null ? filters.indexOf(filter) : -1);
+    if (i < 0 || i >= filters.length) return;
+    filters.removeAt(i);
+    addHistory(filters: filters);
+    setState(() {});
+  }
+
+  /// Removes all active filters and records the change in the state history.
+  void clearFilters() {
+    addHistory(filters: []);
+    setState(() {});
+  }
+
+  /// Whether the active filters can be flattened into a single [FilterState].
+  ///
+  /// True when at least two filters are active and none carry video-timeline
+  /// scheduling metadata (which a static combined matrix cannot reproduce).
+  /// Host apps can use this to enable/disable a "Combine filters" action.
+  bool get canMergeFilters => canMergeFilterStates(stateManager.activeFilters);
+
+  /// Flattens all active filters into a single [FilterState] and records it as
+  /// a single history entry.
+  ///
+  /// Filters are pure color matrices that the editor already renders as one
+  /// combined `ColorFilter.matrix`, so the merged result is appearance-
+  /// identical to the original stack. Tune adjustments are left untouched and
+  /// keep composing on top unchanged. Returns the merged [FilterState], or
+  /// `null` when [canMergeFilters] is `false`.
+  FilterState? mergeFilters() {
+    final filters = stateManager.activeFilters;
+    if (!canMergeFilterStates(filters)) return null;
+
+    final merged = mergeFilterStates(filters);
+    addHistory(filters: [merged]);
+    setState(() {});
+
+    return merged;
+  }
+
+  /// Updates the timeline properties and/or metadata of the filter at the
+  /// given [index] and records the change in the state history.
+  ///
+  /// Only non-null values are applied. This mirrors [setLayerTimeline] but
+  /// operates on the active filter list instead of the layer list.
+  void setFilterTimeline({
+    required int index,
+    Duration? startTime,
+    Duration? endTime,
+    Duration? enterDuration,
+    Duration? exitDuration,
+    Curve? enterCurve,
+    Curve? exitCurve,
+    Map<String, dynamic>? meta,
+    bool skipUpdateHistory = false,
+  }) {
+    final filters = skipUpdateHistory
+        ? stateManager.activeFilters
+        : List<FilterState>.from(stateManager.activeFilters);
+    if (index < 0 || index >= filters.length) return;
+
+    filters[index] = filters[index].copyWith(
+      startTime: startTime,
+      endTime: endTime,
+      enterDuration: enterDuration,
+      exitDuration: exitDuration,
+      enterCurve: enterCurve,
+      exitCurve: exitCurve,
+      meta: meta != null ? {...filters[index].meta, ...meta} : null,
+    );
+
+    if (!skipUpdateHistory) {
+      addHistory(filters: filters);
+    }
+    setState(() {});
+  }
+
+  /// Updates the timeline properties and/or metadata of the tune adjustment
+  /// at the given [index] and records the change in the state history.
+  ///
+  /// Only non-null values are applied. This mirrors [setFilterTimeline] but
+  /// operates on the active tune adjustments list.
+  void setTuneTimeline({
+    required int index,
+    Duration? startTime,
+    Duration? endTime,
+    Duration? enterDuration,
+    Duration? exitDuration,
+    Curve? enterCurve,
+    Curve? exitCurve,
+    Map<String, dynamic>? meta,
+    bool skipUpdateHistory = false,
+  }) {
+    final tunes = skipUpdateHistory
+        ? stateManager.activeTuneAdjustments
+        : List<TuneAdjustmentMatrix>.from(stateManager.activeTuneAdjustments);
+    if (index < 0 || index >= tunes.length) return;
+
+    tunes[index] = tunes[index].copyWith(
+      startTime: startTime,
+      endTime: endTime,
+      enterDuration: enterDuration,
+      exitDuration: exitDuration,
+      enterCurve: enterCurve,
+      exitCurve: exitCurve,
+      meta: meta != null ? {...tunes[index].meta, ...meta} : null,
+    );
+
+    if (!skipUpdateHistory) {
+      addHistory(tuneAdjustments: tunes);
+    }
+    setState(() {});
+  }
+
+  /// Initializes the video editor functionality.
+  void initializeVideoEditor() async {
     if (!_isVideoEditor) return;
 
     _isVideoPlayerReady = false;
 
-    widget.videoController!.initialize(
+    _videoController!.initialize(
       configsFunction: () => configs.videoEditor,
+      callbacksAudioFunction: () =>
+          audioEditorCallbacks ?? const AudioEditorCallbacks(),
       callbacksFunction: () =>
           callbacks.videoEditorCallbacks ?? VideoEditorCallbacks(),
     );
 
-    final resolution = widget.videoController!.initialResolution;
+    final resolution = _videoController!.initialResolution;
     stateManager.activeBackgroundImage = EditorImage(
       byteArray: await createTransparentImage(resolution),
     );
-    _isVideoPlayerReady = true;
 
     if (!mounted) return;
 
     setState(() {});
     await decodeImage();
+    _isVideoPlayerReady = true;
+    setState(() {});
+  }
+
+  /// Called when the video resolution changes (e.g., after merging clips).
+  void _onVideoResolutionChanged() {
+    final newSize = _videoController!.initialResolution;
+    _imageInfos = ImageInfos(
+      rawSize: newSize,
+      renderedSize: newSize,
+      originalRenderedSize: newSize,
+      cropRectSize: newSize,
+      pixelRatio: newSize.width / sizesManager.editorSize.width,
+      isRotated: false,
+    );
+    sizesManager.originalImageSize = newSize;
+    sizesManager.decodedImageSize = newSize;
+    if (mounted) setState(() {});
   }
 
   void _initializeWithTransformations() {
@@ -918,7 +1200,6 @@ class ProImageEditorState extends State<ProImageEditor>
         transformConfigs: transformSetup.transformConfigs,
         blur: 0,
         layers: [],
-        filters: [],
         tuneAdjustments: [],
       ),
     );
@@ -950,7 +1231,7 @@ class ProImageEditorState extends State<ProImageEditor>
       );
     }
     if (!_isVideoPlayerReady && _isVideoEditor) {
-      var initSize = widget.videoController!.initialResolution;
+      var initSize = _videoController!.initialResolution;
       _imageInfos = ImageInfos(
         rawSize: initSize,
         renderedSize: initSize,
@@ -1004,7 +1285,8 @@ class ProImageEditorState extends State<ProImageEditor>
       );
     }
 
-    _imageInfos = imageInfos ??
+    _imageInfos =
+        imageInfos ??
         await decodeImageInfos(
           bytes: await editorImage!.safeByteArray(context),
           screenSize: Size(
@@ -1040,7 +1322,8 @@ class ProImageEditorState extends State<ProImageEditor>
     if (renderedBottomBarHeight != null) {
       sizesManager
         ..bottomBarHeight = renderedBottomBarHeight
-        ..appBarHeight = sizesManager.editorSize.height -
+        ..appBarHeight =
+            sizesManager.editorSize.height -
             sizesManager.bodySize.height -
             sizesManager.bottomBarHeight;
     }
@@ -1150,7 +1433,14 @@ class ProImageEditorState extends State<ProImageEditor>
     /// interaction.
     /// Important: No screenshot is taken at this point; it will be captured
     /// after the layer interaction is completed.
-    if (hasSelectedLayers) addHistory(blockCaptureScreenshot: true);
+    ///
+    /// The `!isLayerBeingTransformed` guard prevents a second history entry
+    /// when Flutter's [ScaleGestureRecognizer] restarts the gesture after a
+    /// mid-gesture pointer change (e.g. a third finger touching down), which
+    /// would otherwise corrupt the history/screenshot stack (issue #850).
+    if (hasSelectedLayers && !isLayerBeingTransformed) {
+      addHistory(blockCaptureScreenshot: true);
+    }
     _checkInteractiveViewer();
     isLayerBeingTransformed = hasSelectedLayers;
     layerInteractionManager.onScaleStart(
@@ -1258,6 +1548,7 @@ class ProImageEditorState extends State<ProImageEditor>
           mainEditorCallbacks?.onHoverRemoveAreaChange?.call(value);
         },
         helperLineCtrl: _controllers.helperLineCtrl,
+        editorBodySize: sizesManager.bodySize,
       );
     } else if (pointerCount == 2) {
       /// If multi-selection is active and the editor is zoomable, treat
@@ -1291,6 +1582,29 @@ class ProImageEditorState extends State<ProImageEditor>
   /// lines and flags.
   void _onScaleEnd(ScaleEndDetails details) async {
     mainEditorCallbacks?.handleScaleEnd(details);
+
+    /// Flutter's [ScaleGestureRecognizer] fires a spurious `onScaleEnd`
+    /// (immediately followed by a fresh `onScaleStart`) whenever the number of
+    /// active pointers changes mid-gesture — for example when a third finger
+    /// touches the screen while two fingers are still rotating a layer. In that
+    /// case the fingers are not actually lifted ([details.pointerCount] > 0),
+    /// so we must not run the destructive finish logic below (removing the last
+    /// screenshot, mutating the history stack and clearing the selection).
+    /// Doing so corrupts the history/screenshot stack and, on iOS, crashes the
+    /// editor with a `_dependents.isEmpty` framework assertion (issue #850).
+    ///
+    /// The interactive viewer still needs the event to keep its own
+    /// start/end pairing balanced.
+    if (details.pointerCount > 0) {
+      if (!hasSelectedLayers && !_layerDragSelectionService.isActive) {
+        interactiveViewer.currentState?.onScaleEnd(details);
+      }
+      return;
+    }
+
+    if (selectedLayers.isNotEmpty) {
+      mainEditorCallbacks?.handleLayerInteractionEnd(List.of(selectedLayers));
+    }
     layerInteractionManager.activeInteractionLayer = null;
 
     /// Check if layers should be removed.
@@ -1331,59 +1645,107 @@ class ProImageEditorState extends State<ProImageEditor>
     setState(() {});
   }
 
-  /// Handles tap events on a text layer.
+  /// Opens the text editor to modify an existing [TextLayer].
   ///
-  /// This method opens a text editor for the specified text layer and updates
-  /// the layer's properties
-  /// based on the user's input.
+  /// If [MainEditorCallbacks.onEditTextLayer] is set, the custom callback is
+  /// invoked instead of navigating to the built-in [TextEditor]. In both cases
+  /// a deep copy of [layerData] is passed so the original is never mutated
+  /// before the user confirms the edit.
   ///
-  /// [layerData] - The text layer data to be edited.
-  void _onTextLayerTap(TextLayer layerData) async {
-    TextLayer? updatedLayer = await openPage(
-      TextEditor(
-        key: textEditor,
-        layer: _layerCopyManager.copyLayer(layerData) as TextLayer,
-        heroTag: layerData.id,
-        configs: configs,
-        theme: _theme,
-        callbacks: callbacks,
-        scaleFactor: textEditorConfigs.enableMainEditorZoomFactor
-            ? interactiveViewer.currentState?.scaleFactor ?? 1.0
-            : 1.0,
-        imageSize: sizesManager.decodedImageSize,
-      ),
+  /// After the editor returns the updated layer, all identity and transform
+  /// properties (`id`, `key`, `offset`, `scale`, `rotation`, etc.) are
+  /// restored from the original [layerData] to prevent unintended drift.
+  ///
+  /// If the returned text is empty, the layer is removed via [removeLayer].
+  /// Otherwise the layer is replaced in place via [replaceLayer].
+  ///
+  /// - [layerData]: The existing [TextLayer] to edit.
+  void editTextLayer(TextLayer layerData) async {
+    final customCallback = mainEditorCallbacks?.onEditTextLayer;
+    TextLayer? updatedLayer;
 
-      /// Small Duration is important for a smooth hero animation
-      duration: const Duration(milliseconds: 250),
-    );
+    if (customCallback != null) {
+      updatedLayer = await customCallback(
+        _layerCopyManager.copyLayer(layerData) as TextLayer,
+      );
+    } else {
+      updatedLayer = await openPage(
+        TextEditor(
+          key: textEditor,
+          layer: _layerCopyManager.copyLayer(layerData) as TextLayer,
+          heroTag: layerData.id,
+          configs: configs,
+          theme: _theme,
+          callbacks: callbacks,
+          scaleFactor: textEditorConfigs.enableMainEditorZoomFactor
+              ? interactiveViewer.currentState?.scaleFactor ?? 1.0
+              : 1.0,
+          imageSize: sizesManager.decodedImageSize,
+        ),
+
+        /// Small Duration is important for a smooth hero animation
+        duration: const Duration(milliseconds: 250),
+      );
+    }
 
     if (!mounted || updatedLayer == null) return;
 
+    applyTextLayerChanges(layerData, updatedLayer);
+  }
+
+  /// Applies the result of a text editor session back to the layer stack.
+  ///
+  /// Restores all identity and transform properties (`id`, `key`, `offset`,
+  /// `scale`, `rotation`, etc.) from [original] onto [updatedLayer] so the
+  /// layer keeps its position in the editor.
+  ///
+  /// If [updatedLayer.text] is empty the layer is removed via [removeLayer].
+  /// Otherwise the layer is replaced in place via [replaceLayer].
+  ///
+  /// This method is called internally by [editTextLayer] but is also exposed
+  /// publicly so custom [MainEditorCallbacks.onEditTextLayer] implementations
+  /// can reuse the same commit logic.
+  ///
+  /// - [original]: The original [TextLayer] before editing.
+  /// - [updatedLayer]: The [TextLayer] returned by the editor.
+  void applyTextLayerChanges(TextLayer original, TextLayer updatedLayer) {
     updatedLayer
-      ..id = layerData.id
-      ..key = layerData.key
-      ..keyInternalSize = layerData.keyInternalSize
-      ..flipX = layerData.flipX
-      ..flipY = layerData.flipY
-      ..offset = layerData.offset
-      ..scale = layerData.scale
-      ..rotation = layerData.rotation
-      ..boxConstraints = layerData.boxConstraints
-      ..groupId = layerData.groupId
-      ..interaction = layerData.interaction
-      ..meta = layerData.meta;
+      ..id = original.id
+      ..key = original.key
+      ..keyInternalSize = original.keyInternalSize
+      ..flipX = original.flipX
+      ..flipY = original.flipY
+      ..offset = original.offset
+      ..scale = original.scale
+      ..rotation = original.rotation
+      ..boxConstraints = original.boxConstraints
+      ..groupId = original.groupId
+      ..interaction = original.interaction
+      ..meta = original.meta;
 
     if (updatedLayer.text.isEmpty) {
-      removeLayer(layerData);
+      removeLayer(original);
       return;
     }
 
-    int i = activeLayers.indexWhere((element) => element.id == layerData.id);
+    int i = activeLayers.indexWhere((element) => element.id == original.id);
     replaceLayer(index: i, layer: updatedLayer);
   }
 
-  void _editPaintLayer(PaintLayer layer) async {
-    if (layer.isPaintLayer && layer.item.isCensorArea) return;
+  /// Opens the paint editor to modify an existing [PaintLayer].
+  ///
+  /// Censor-area layers are not editable and return immediately without
+  /// opening the editor.
+  ///
+  /// If [PaintEditorCallbacks.onEditLayer] is set, the custom callback is
+  /// invoked instead of showing the built-in bottom-sheet editor.
+  ///
+  /// If the user dismisses without saving, the result is `null` and no change
+  /// is made. Otherwise the layer is replaced in place via [replaceLayer].
+  ///
+  /// - [layer]: The existing [PaintLayer] to edit.
+  void editPaintLayer(PaintLayer layer) async {
+    if (layer.isPaintLayer && layer.isCensor) return;
 
     PaintLayer? result =
         await (callbacks.paintEditorCallbacks?.onEditLayer?.call(layer) ??
@@ -1398,8 +1760,12 @@ class ProImageEditorState extends State<ProImageEditor>
                   paintEditorConfigs.widgets.editBottomSheet?.call(layer) ??
                   SafeArea(
                     child: PaintEditorLayerEditor(
-                      layer: _layerCopyManager.duplicateLayer(layer,
-                          offset: Offset.zero) as PaintLayer,
+                      layer:
+                          _layerCopyManager.duplicateLayer(
+                                layer,
+                                offset: Offset.zero,
+                              )
+                              as PaintLayer,
                       configs: configs,
                     ),
                   ),
@@ -1456,39 +1822,42 @@ class ProImageEditorState extends State<ProImageEditor>
       editorName = SubEditor.cropRotate;
     } else if (T is TuneAdjustmentMatrix || page is TuneEditor) {
       editorName = SubEditor.tune;
-    } else if (T is FilterMatrix || page is FilterEditor) {
+    } else if (T is FilterMatrix || T is FilterState || page is FilterEditor) {
       editorName = SubEditor.filter;
     } else if (T is double || page is BlurEditor) {
       editorName = SubEditor.blur;
     } else if (page is EmojiEditor) {
       editorName = SubEditor.emoji;
+    } else if (page is AudioEditorPage) {
+      editorName = SubEditor.audio;
+    } else if (page is ClipsEditorPage) {
+      editorName = SubEditor.clips;
     }
 
     mainEditorCallbacks?.handleOpenSubEditor(editorName);
     _pageOpenCompleter = Completer();
 
     final subEditorStyle = mainEditorConfigs.style.subEditorPage;
-    return Navigator.push<T?>(
-      context,
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: subEditorStyle.barrierColor,
-        barrierDismissible: subEditorStyle.barrierDismissible,
-        transitionDuration: duration,
-        reverseTransitionDuration: duration,
-        transitionsBuilder: subEditorStyle.transitionsBuilder ??
-            (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-        pageBuilder: (context, animation, secondaryAnimation) {
-          void animationStatusListener(AnimationStatus status) {
-            switch (status) {
-              case AnimationStatus.completed:
-                if (cropRotateEditor.currentState != null) {
-                  cropRotateEditor.currentState!.hideFakeHero();
-                }
-                break;
-              case AnimationStatus.dismissed:
+    var route = PageRouteBuilder<T?>(
+      opaque: false,
+      barrierColor: subEditorStyle.barrierColor,
+      barrierDismissible: subEditorStyle.barrierDismissible,
+      transitionDuration: duration,
+      reverseTransitionDuration: duration,
+      transitionsBuilder:
+          subEditorStyle.transitionsBuilder ??
+          (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+      pageBuilder: (context, animation, secondaryAnimation) {
+        void animationStatusListener(AnimationStatus status) {
+          switch (status) {
+            case AnimationStatus.completed:
+              if (cropRotateEditor.currentState != null) {
+                cropRotateEditor.currentState!.hideFakeHero();
+              }
+              break;
+            case AnimationStatus.dismissed:
                 if (!_pageOpenCompleter.isCompleted) {
                   _pageOpenCompleter.complete(true);
                 }
@@ -1504,64 +1873,70 @@ class ProImageEditorState extends State<ProImageEditor>
                   });
                 }
 
-                animation.removeStatusListener(animationStatusListener);
-                mainEditorCallbacks?.handleEndCloseSubEditor(editorName);
-                break;
-              case AnimationStatus.reverse:
-                isSubEditorClosing = true;
-                mainEditorCallbacks?.handleStartCloseSubEditor(editorName);
+              animation.removeStatusListener(animationStatusListener);
+              mainEditorCallbacks?.handleEndCloseSubEditor(editorName);
+              break;
+            case AnimationStatus.reverse:
+              isSubEditorClosing = true;
+              mainEditorCallbacks?.handleStartCloseSubEditor(editorName);
 
-                break;
-              case AnimationStatus.forward:
-                break;
-            }
+              break;
+            case AnimationStatus.forward:
+              break;
           }
+        }
 
-          animation.addStatusListener(animationStatusListener);
-          if (isUsingPaddingBottomForKeyboard) {
-            final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-            final paddingBottom = keyboardHeight > 0 ? keyboardHeight * 0.7 : 0.0;
-            // print('keyboardHeight openPage: $keyboardHeight');
-            // print('paddingBottom openPage: $paddingBottom');
+        animation.addStatusListener(animationStatusListener);
+        /*
+        if (isUsingPaddingBottomForKeyboard) {
+          final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+          final paddingBottom = keyboardHeight > 0 ? keyboardHeight * 0.7 : 0.0;
+          // print('keyboardHeight openPage: $keyboardHeight');
+          // print('paddingBottom openPage: $paddingBottom');
 
-            // print('!subEditorStyle.requireReposition: ${!subEditorStyle.requireReposition}');
+          // print('!subEditorStyle.requireReposition: ${!subEditorStyle.requireReposition}');
 
-            if (!subEditorStyle.requireReposition) return Padding(padding: EdgeInsets.only(bottom: paddingBottom), child: page);
-          }
+          if (!subEditorStyle.requireReposition) return Padding(padding: EdgeInsets.only(bottom: paddingBottom), child: page);
+        }
+        animation.addStatusListener(animationStatusListener);
+        */
 
-          if (!subEditorStyle.requireReposition) return page;
+        if (!subEditorStyle.requireReposition) return page;
 
-          return SafeArea(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned(
-                  top: subEditorStyle.positionTop,
-                  left: subEditorStyle.positionLeft,
-                  right: subEditorStyle.positionRight,
-                  bottom: subEditorStyle.positionBottom,
-                  child: Center(
-                    child: Container(
-                      width: subEditorStyle.enforceSizeFromMainEditor
-                          ? sizesManager.editorSize.width
-                          : null,
-                      height: subEditorStyle.enforceSizeFromMainEditor
-                          ? sizesManager.editorSize.height
-                          : null,
-                      clipBehavior: Clip.hardEdge,
-                      decoration: BoxDecoration(
-                        borderRadius: subEditorStyle.borderRadius,
-                      ),
-                      child: page,
+        return SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                top: subEditorStyle.positionTop,
+                left: subEditorStyle.positionLeft,
+                right: subEditorStyle.positionRight,
+                bottom: subEditorStyle.positionBottom,
+                child: Center(
+                  child: Container(
+                    width: subEditorStyle.enforceSizeFromMainEditor
+                        ? sizesManager.editorSize.width
+                        : null,
+                    height: subEditorStyle.enforceSizeFromMainEditor
+                        ? sizesManager.editorSize.height
+                        : null,
+                    clipBehavior: Clip.hardEdge,
+                    decoration: BoxDecoration(
+                      borderRadius: subEditorStyle.borderRadius,
                     ),
+                    child: page,
                   ),
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
+    if (mainEditorConfigs.enableSubEditorPage) {
+      return _navigatorKey.currentState!.push<T?>(route);
+    }
+    return Navigator.push<T?>(context, route);
   }
 
   /// Opens the paint editor.
@@ -1588,7 +1963,7 @@ class ProImageEditorState extends State<ProImageEditor>
         editorImage: widget.blankSize == null
             ? editorImage
             : EditorImage(byteArray: kImageEditorTransparentBytes),
-        videoController: widget.videoController,
+        videoController: _videoController,
         initConfigs: PaintEditorInitConfigs(
           configs: configs,
           callbacks: callbacks.copyWith(
@@ -1604,7 +1979,7 @@ class ProImageEditorState extends State<ProImageEditor>
           mainBodySize: sizesManager.bodySize,
           transformConfigs: stateManager.transformConfigs,
           appliedBlurFactor: stateManager.activeBlur,
-          appliedFilters: stateManager.activeFilters,
+          appliedFilters: stateManager.activeFilters.allMatrices,
           appliedTuneAdjustments: stateManager.activeTuneAdjustments,
           initialZoomMatrix: interactiveViewer.currentState?.transformMatrix4,
         ),
@@ -1614,28 +1989,75 @@ class ProImageEditorState extends State<ProImageEditor>
 
     if (result == null) return;
 
+    // Deep-copy active layers ONCE, then build history entries incrementally.
+    // This avoids the O(N²) cost of copyLayerList on every addLayer call.
+    final runningLayers = _layerCopyManager.copyLayerList(activeLayers);
+    final historyLimit = stateHistoryConfigs.stateHistoryLimit;
+    final enableScreenshotLimit =
+        imageGenerationConfigs.enableBackgroundGeneration;
+    final preservedFilters = stateManager.activeFilters
+        .map((item) => item.copy())
+        .toList(growable: false);
+    final preservedTuneAdjustments = stateManager.activeTuneAdjustments
+        .map((item) => item.copy())
+        .toList(growable: false);
+    final preservedMeta = _deepCopyMeta(stateManager.activeMeta);
+
     String lastLayerId = '';
     for (var i = 0; i < result.layers.length; i++) {
       final layer = result.layers[i];
-      final oldIndex = activeLayers.indexWhere((el) => el.id == layer.id);
+      final oldIndex = runningLayers.indexWhere((el) => el.id == layer.id);
 
       final duplicatedLayer = _layerCopyManager.duplicateLayer(
         layer,
         offset: Offset.zero,
       );
       lastLayerId = duplicatedLayer.id;
-      addLayer(
-        duplicatedLayer,
-        removeLayerIndex: oldIndex,
-        blockSelectLayer: true,
-        blockCaptureScreenshot: true,
-        autoCorrectZoomOffset: false,
-        autoCorrectZoomScale: false,
+
+      if (oldIndex >= 0) {
+        runningLayers.removeAt(oldIndex);
+      }
+      runningLayers.add(duplicatedLayer);
+
+      // Add individual history entry (for per-layer undo) with a shallow
+      // snapshot — the layer objects themselves are already independent copies.
+      stateManager.addHistory(
+        EditorStateHistory(
+          layers: List<Layer>.of(runningLayers),
+          filters: preservedFilters,
+          tuneAdjustments: preservedTuneAdjustments,
+          meta: _deepCopyMeta(preservedMeta),
+        ),
+        historyLimit: historyLimit,
+        enableScreenshotLimit: enableScreenshotLimit,
+        skipUpdateActiveItems: true,
+      );
+      _controllers.screenshot.addEmptyScreenshot(
+        screenshots: stateManager.screenshots,
       );
     }
+
     for (Layer layer in result.removedLayers) {
-      removeLayer(layer, blockCaptureScreenshot: true);
+      final layerPos = runningLayers.indexWhere((el) => el.id == layer.id);
+      if (layerPos < 0) continue;
+      runningLayers.removeAt(layerPos);
+      stateManager.addHistory(
+        EditorStateHistory(
+          layers: List<Layer>.of(runningLayers),
+          filters: preservedFilters,
+          tuneAdjustments: preservedTuneAdjustments,
+          meta: _deepCopyMeta(preservedMeta),
+        ),
+        historyLimit: historyLimit,
+        enableScreenshotLimit: enableScreenshotLimit,
+        skipUpdateActiveItems: true,
+      );
+      _controllers.screenshot.addEmptyScreenshot(
+        screenshots: stateManager.screenshots,
+      );
     }
+
+    stateManager.updateActiveItems();
 
     if (lastLayerId.isNotEmpty) {
       _selectLayerAfterHeroIsDone(lastLayerId);
@@ -1654,10 +2076,14 @@ class ProImageEditorState extends State<ProImageEditor>
     /// Small Duration is important for a smooth hero animation
     Duration duration = const Duration(milliseconds: 150),
   }) async {
-    TextLayer? layer = await openPage(
-      isUsingPaddingBottomForKeyboard: true,
-      MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)), 
-        child: TextEditor(
+    final customCallback = mainEditorCallbacks?.onCreateTextLayer;
+    TextLayer? layer;
+
+    if (customCallback != null) {
+      layer = await customCallback();
+    } else {
+      layer = await openPage(
+        TextEditor(
           key: textEditor,
           configs: configs,
           theme: _theme,
@@ -1666,10 +2092,10 @@ class ProImageEditorState extends State<ProImageEditor>
               ? interactiveViewer.currentState?.scaleFactor ?? 1.0
               : 1.0,
           imageSize: sizesManager.decodedImageSize,
-        )
-      ),
-      duration: duration,
-    );
+        ),
+        duration: duration,
+      );
+    }
 
     if (layer == null || !mounted) return;
 
@@ -1693,7 +2119,7 @@ class ProImageEditorState extends State<ProImageEditor>
         editorImage: widget.blankSize == null
             ? editorImage
             : EditorImage(byteArray: kImageEditorTransparentBytes),
-        videoController: widget.videoController,
+        videoController: _videoController,
         initConfigs: CropRotateEditorInitConfigs(
           configs: configs,
           callbacks: callbacks,
@@ -1704,7 +2130,7 @@ class ProImageEditorState extends State<ProImageEditor>
           mainBodySize: sizesManager.bodySize,
           enableFakeHero: true,
           appliedBlurFactor: stateManager.activeBlur,
-          appliedFilters: stateManager.activeFilters,
+          appliedFilters: stateManager.activeFilters.allMatrices,
           appliedTuneAdjustments: stateManager.activeTuneAdjustments,
           onDone: (transformConfigs, fitToScreenFactor, imageInfos) async {
             List<Layer> updatedLayers = LayerTransformGenerator(
@@ -1761,7 +2187,7 @@ class ProImageEditorState extends State<ProImageEditor>
           editorImage: widget.blankSize == null
               ? editorImage
               : EditorImage(byteArray: kImageEditorTransparentBytes),
-          videoController: widget.videoController,
+          videoController: _videoController,
           initConfigs: TuneEditorInitConfigs(
             theme: _theme,
             configs: configs,
@@ -1772,7 +2198,7 @@ class ProImageEditorState extends State<ProImageEditor>
             mainBodySize: sizesManager.bodySize,
             convertToUint8List: false,
             appliedBlurFactor: stateManager.activeBlur,
-            appliedFilters: stateManager.activeFilters,
+            appliedFilters: stateManager.activeFilters.allMatrices,
             appliedTuneAdjustments: stateManager.activeTuneAdjustments,
           ),
         ),
@@ -1781,7 +2207,13 @@ class ProImageEditorState extends State<ProImageEditor>
 
     if (tuneAdjustments == null) return;
 
-    addHistory(tuneAdjustments: tuneAdjustments, heroScreenshotRequired: true);
+    addHistory(
+      tuneAdjustments: [
+        ...stateManager.activeTuneAdjustments.map((item) => item.copy()),
+        ...tuneAdjustments,
+      ],
+      heroScreenshotRequired: true,
+    );
 
     setState(() {});
     mainEditorCallbacks?.handleUpdateUI();
@@ -1799,13 +2231,13 @@ class ProImageEditorState extends State<ProImageEditor>
   /// original image is retained.
   void openFilterEditor() async {
     if (!mounted) return;
-    FilterMatrix? filters = await openPage(
+    FilterState? filterState = await openPage(
       FilterEditor.autoSource(
         key: filterEditor,
         editorImage: widget.blankSize == null
             ? editorImage
             : EditorImage(byteArray: kImageEditorTransparentBytes),
-        videoController: widget.videoController,
+        videoController: _videoController,
         initConfigs: FilterEditorInitConfigs(
           theme: _theme,
           configs: configs,
@@ -1816,15 +2248,21 @@ class ProImageEditorState extends State<ProImageEditor>
           mainBodySize: sizesManager.bodySize,
           convertToUint8List: false,
           appliedBlurFactor: stateManager.activeBlur,
-          appliedFilters: stateManager.activeFilters,
+          appliedFilters: stateManager.activeFilters.allMatrices,
           appliedTuneAdjustments: stateManager.activeTuneAdjustments,
         ),
       ),
     );
 
-    if (filters == null) return;
+    if (filterState == null) return;
 
-    addHistory(filters: filters, heroScreenshotRequired: true);
+    addHistory(
+      filters: [
+        ...stateManager.activeFilters.map((item) => item.copy()),
+        filterState,
+      ],
+      heroScreenshotRequired: true,
+    );
 
     setState(() {});
     mainEditorCallbacks?.handleUpdateUI();
@@ -1839,7 +2277,7 @@ class ProImageEditorState extends State<ProImageEditor>
         editorImage: widget.blankSize == null
             ? editorImage
             : EditorImage(byteArray: kImageEditorTransparentBytes),
-        videoController: widget.videoController,
+        videoController: _videoController,
         initConfigs: BlurEditorInitConfigs(
           theme: _theme,
           mainImageSize: widget.blankSize ?? sizesManager.decodedImageSize,
@@ -1850,7 +2288,7 @@ class ProImageEditorState extends State<ProImageEditor>
           transformConfigs: stateManager.transformConfigs,
           convertToUint8List: false,
           appliedBlurFactor: stateManager.activeBlur,
-          appliedFilters: stateManager.activeFilters,
+          appliedFilters: stateManager.activeFilters.allMatrices,
           appliedTuneAdjustments: stateManager.activeTuneAdjustments,
         ),
       ),
@@ -1880,7 +2318,8 @@ class ProImageEditorState extends State<ProImageEditor>
     _checkInteractiveViewer();
     ServicesBinding.instance.keyboard.removeHandler(_onKeyEvent);
     final effectiveBoxConstraints = emojiEditorConfigs
-        .style.editorBoxConstraintsBuilder
+        .style
+        .editorBoxConstraintsBuilder
         ?.call(context, configs);
 
     DraggableSheetStyle sheetTheme =
@@ -1896,7 +2335,8 @@ class ProImageEditorState extends State<ProImageEditor>
       builder: (BuildContext context) => SafeArea(
         child: !useDraggableSheet
             ? ConstrainedBox(
-                constraints: effectiveBoxConstraints ??
+                constraints:
+                    effectiveBoxConstraints ??
                     BoxConstraints(
                       maxHeight: 300 + MediaQuery.viewInsetsOf(context).bottom,
                     ),
@@ -1936,7 +2376,8 @@ class ProImageEditorState extends State<ProImageEditor>
     _checkInteractiveViewer();
     ServicesBinding.instance.keyboard.removeHandler(_onKeyEvent);
     final effectiveBoxConstraints = stickerEditorConfigs
-        .style.editorBoxConstraintsBuilder
+        .style
+        .editorBoxConstraintsBuilder
         ?.call(context, configs);
     var sheetTheme = stickerEditorConfigs.style.draggableSheetStyle;
     WidgetLayer? layer = await showModalBottomSheet(
@@ -1972,6 +2413,100 @@ class ProImageEditorState extends State<ProImageEditor>
 
     setState(() {});
     mainEditorCallbacks?.handleUpdateUI();
+  }
+
+  /// Opens the audio editor page to select or adjust an audio track.
+  ///
+  /// Throws an [ArgumentError] if called while editing an image
+  /// instead of a video.
+  ///
+  /// After the editor closes, updates the current video controller
+  /// with the selected [AudioTrack] and its start time.
+  void openAudioEditor({bool enforceChooseTrackPage = false}) async {
+    if (!_isVideoEditor) {
+      throw ArgumentError(
+        'This editor can only be opened when editing videos, not images.',
+      );
+    }
+
+    bool isEditSheetAvailable =
+        audioEditorConfigs.enableEditBalance ||
+        audioEditorConfigs.enableEditStartTime;
+
+    if (!enforceChooseTrackPage &&
+        _videoController!.audioTrack != null &&
+        isEditSheetAvailable) {
+      _audioBottomBarNotifier.value = true;
+      return;
+    }
+
+    _videoController!.pause();
+
+    if (!mounted) return;
+    AudioEditorResponse? response = await openPage(
+      AudioEditorPage(
+        key: audioEditor,
+        configs: configs,
+        callbacks: callbacks,
+        theme: _theme,
+        initialSelectedTrack: _videoController!.audioTrack,
+        videoDuration: _videoController!.videoDuration,
+      ),
+      duration: Duration.zero,
+    );
+
+    if (response == null) {
+      return;
+    }
+
+    _videoController!.audioTrack = response.track;
+    if (_audioBottomBarNotifier.value) {
+      setState(() {});
+    } else if (isEditSheetAvailable) {
+      _audioBottomBarNotifier.value = true;
+    }
+
+    if (_videoController!.isPlayingNotifier.value && response.track != null) {
+      await audioEditorCallbacks!.onPlay!(response.track!);
+    }
+  }
+
+  /// Opens the clips editor page to trim or merge video segments.
+  ///
+  /// Allows users to adjust the start and end times of the video
+  /// and optionally merge multiple clips or audio tracks into one.
+  ///
+  /// Throws an [ArgumentError] if called while editing an image
+  /// instead of a video.
+  ///
+  /// After the editor closes, updates the current video configuration
+  /// with the trimmed or merged result.
+  void openClipsEditor() async {
+    if (!_isVideoEditor) {
+      throw ArgumentError(
+        'This editor can only be opened when editing videos, not images.',
+      );
+    }
+    _videoController!.pause();
+
+    if (!mounted) return;
+    VideoClipEditorResponse? response = await openPage(
+      ClipsEditorPage(
+        key: audioEditor,
+        configs: configs,
+        callbacks: callbacks,
+        theme: _theme,
+        videoDuration: _videoController!.videoDuration,
+        initialClips: _videoController!.clips,
+      ),
+      duration: Duration.zero,
+    );
+
+    if (response == null) {
+      return;
+    }
+
+    _videoController!.clips = response.videoClips;
   }
 
   /// Moves a layer in the list to a new position.
@@ -2149,61 +2684,99 @@ class ProImageEditorState extends State<ProImageEditor>
         message: i18n.doneLoadingMsg,
       );
 
-      if (callbacks.onThumbnailGenerated != null) {
-        if (_imageInfos == null) await decodeImage();
+      try {
+        if (callbacks.onThumbnailGenerated != null) {
+          if (_imageInfos == null) await decodeImage();
 
-        final results = await Future.wait([
-          captureEditorImage(),
-          _controllers.screenshot.getRawRenderedImage(
-            imageInfos: _imageInfos!,
-            useThumbnailSize: false,
-          ),
-        ]);
+          final Uint8List imageBytes = mainEditorConfigs.captureImageOnDone
+              ? await captureEditorImage()
+              : Uint8List.fromList([]);
 
-        await callbacks.onThumbnailGenerated!(
-          results[0] as Uint8List,
-          results[1] as ui.Image,
-        );
-      } else {
-        Uint8List? bytes = await captureEditorImage();
-        await onImageEditingComplete?.call(bytes);
+          final results = await Future.wait([
+            Future.value(imageBytes),
+            _controllers.screenshot.getRawRenderedImage(
+              imageInfos: _imageInfos!,
+              useThumbnailSize: false,
+            ),
+          ]);
 
-        final transform = stateManager.transformConfigs;
-        final isTransformed = transform.isNotEmpty;
+          await callbacks.onThumbnailGenerated!(
+            imageBytes,
+            results[1] as ui.Image,
+          );
+        } else {
+          Uint8List? bytes = mainEditorConfigs.captureImageOnDone
+              ? await captureEditorImage()
+              : null;
+          if (bytes != null) {
+            await onImageEditingComplete?.call(bytes);
+          }
 
-        Size originalImageSize = _imageInfos!.rawSize;
-        Size outputSize = transform.getCropSize(originalImageSize);
-        Offset outputOffset = transform.getCropStartOffset(originalImageSize);
+          final capturedLayers = mainEditorConfigs.captureLayersOnDone
+              ? await captureAllLayersWithMeta(
+                  applyTransforms: true,
+                  basePixelRatio: configs.imageGeneration.customPixelRatio,
+                )
+              : <ExportedLayer>[];
 
-        await onCompleteWithParameters?.call(
-          CompleteParameters(
-            blur: stateManager.activeBlur,
-            matrixFilterList: stateManager.activeFilters,
-            matrixTuneAdjustmentsList: stateManager.activeTuneAdjustments
-                .map((item) => item.matrix)
-                .toList(),
-            startTime: widget.videoController?.startTime,
-            endTime: widget.videoController?.endTime,
-            cropWidth: isTransformed ? outputSize.width.round() : null,
-            cropHeight: isTransformed ? outputSize.height.round() : null,
-            cropX: isTransformed ? outputOffset.dx.round() : null,
-            cropY: isTransformed ? outputOffset.dy.round() : null,
-            flipX: transform.is90DegRotated ? transform.flipY : transform.flipX,
-            flipY: transform.is90DegRotated ? transform.flipX : transform.flipY,
-            rotateTurns: transform.angleToTurns(),
-            image: bytes,
-            isTransformed: isTransformed,
-            layers: activeLayers,
-          ),
-        );
+          final transform = stateManager.transformConfigs;
+          final isTransformed = transform.isNotEmpty;
+
+          Size originalImageSize = _imageInfos!.rawSize;
+          Size outputSize = transform.getCropSize(originalImageSize);
+          Offset outputOffset = transform.getCropStartOffset(originalImageSize);
+
+          await onCompleteWithParameters?.call(
+            CompleteParameters(
+              blur: stateManager.activeBlur,
+              matrixFilterList: stateManager.activeFilters.allMatrices,
+              filterStates: stateManager.activeFilters,
+              tuneAdjustments: stateManager.activeTuneAdjustments,
+              matrixTuneAdjustmentsList: stateManager.activeTuneAdjustments
+                  .map((item) => item.matrix)
+                  .toList(),
+              startTime: _videoController?.startTime,
+              endTime: _videoController?.endTime,
+              cropWidth: isTransformed ? outputSize.width.round() : null,
+              cropHeight: isTransformed ? outputSize.height.round() : null,
+              cropX: isTransformed ? outputOffset.dx.round() : null,
+              cropY: isTransformed ? outputOffset.dy.round() : null,
+              flipX: transform.is90DegRotated
+                  ? transform.flipY
+                  : transform.flipX,
+              flipY: transform.is90DegRotated
+                  ? transform.flipX
+                  : transform.flipY,
+              rotateTurns: transform.angleToTurns(),
+              tiltRotate: transform.tiltRotate,
+              tiltHorizontal: transform.tiltHorizontal,
+              tiltVertical: transform.tiltVertical,
+              image: bytes ?? Uint8List.fromList([]),
+              isTransformed: isTransformed,
+              layers: activeLayers,
+              capturedLayers: capturedLayers,
+              customAudioTrack: _videoController?.audioTrack,
+              audioTracks: _videoController?.audioTrack != null
+                  ? [_videoController!.audioTrack!]
+                  : [],
+              videoClips: _videoController?.clips ?? [],
+              originalImageSize: sizesManager.originalImageSize,
+              temporaryDecodedImageSize: sizesManager.temporaryDecodedImageSize,
+              bodySize: sizesManager.bodySize,
+              editorSize: sizesManager.editorSize,
+              meta: stateManager.activeMeta,
+            ),
+          );
+        }
+
+        onCloseEditor?.call(EditorMode.main);
+      } finally {
+        LoadingDialog.instance.hide();
+
+        /// Allow users to continue editing if they didn't close the editor.
+        _isProcessingFinalImage = false;
+        if (mounted) setState(() {});
       }
-
-      LoadingDialog.instance.hide();
-
-      onCloseEditor?.call(EditorMode.main);
-
-      /// Allow users to continue editing if they didn't close the editor.
-      setState(() => _isProcessingFinalImage = false);
     });
   }
 
@@ -2230,7 +2803,8 @@ class ProImageEditorState extends State<ProImageEditor>
     if (!mounted) return Uint8List.fromList([]);
 
     bool hasChanges = stateManager.canUndo;
-    bool useOriginalImage = !_isVideoEditor &&
+    bool useOriginalImage =
+        !_isVideoEditor &&
         !hasChanges &&
         imageGenerationConfigs.enableUseOriginalBytes;
 
@@ -2240,13 +2814,67 @@ class ProImageEditorState extends State<ProImageEditor>
 
     return await _controllers.screenshot.captureFinalScreenshot(
           imageInfos: _imageInfos!,
-          backgroundScreenshot:
-              useOriginalImage ? null : stateManager.activeScreenshot,
+          backgroundScreenshot: useOriginalImage
+              ? null
+              : stateManager.activeScreenshot,
           originalImageBytes: useOriginalImage
               ? await editorImage!.safeByteArray(context)
               : null,
         ) ??
         Uint8List.fromList([]);
+  }
+
+  /// Captures all active layers in one batch.
+  ///
+  /// For PNG exports, this method reuses the editor's existing
+  /// [ContentRecorderController] so isolate resources stay warm and can be
+  /// processed efficiently across all layers.
+  Future<List<Uint8List?>> captureAllLayers({
+    double? pixelRatio,
+    double? basePixelRatio,
+    bool applyTransforms = true,
+    ui.ImageByteFormat format = ui.ImageByteFormat.png,
+  }) async {
+    final exported = await captureAllLayersWithMeta(
+      pixelRatio: pixelRatio,
+      basePixelRatio: basePixelRatio,
+      applyTransforms: applyTransforms,
+      format: format,
+    );
+    return exported.map((e) => e.bytes).toList();
+  }
+
+  /// Captures all active layers in one batch and returns metadata per layer.
+  ///
+  /// For PNG exports, this method reuses the editor's existing
+  /// [ContentRecorderController] so isolate resources stay warm and can be
+  /// processed efficiently across all layers.
+  Future<List<ExportedLayer>> captureAllLayersWithMeta({
+    double? pixelRatio,
+    double? basePixelRatio,
+    bool applyTransforms = true,
+    ui.ImageByteFormat format = ui.ImageByteFormat.png,
+  }) async {
+    if (isSubEditorOpen) {
+      Navigator.pop(context);
+      if (!_pageOpenCompleter.isCompleted) await _pageOpenCompleter.future;
+      if (!mounted) return <ExportedLayer>[];
+    }
+
+    // Ensure the current frame with layers is fully rendered before capture.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return <ExportedLayer>[];
+
+    return Layer.captureAllLayers(
+      layers: activeLayers,
+      pixelRatio: pixelRatio,
+      basePixelRatio: basePixelRatio,
+      applyTransforms: applyTransforms,
+      format: format,
+      recorder: format == ui.ImageByteFormat.png
+          ? _controllers.screenshot
+          : null,
+    );
   }
 
   /// Closes all active sub-editors within the main editor, including paint,
@@ -2487,24 +3115,92 @@ class ProImageEditorState extends State<ProImageEditor>
     _controllers.uiLayerCtrl.add(null);
   }
 
+  /// Whether the current selection can be combined into a single paint layer.
+  ///
+  /// Returns `true` when at least two of the selected layers are non-censor
+  /// [PaintLayer]s. Host apps can use this to enable/disable a "Combine"
+  /// action. See [mergeSelectedLayers].
+  bool get canMergeSelectedLayers =>
+      PaintLayerMergeManager.canMerge(selectedLayers);
+
+  /// Combines the currently selected non-censor paint layers into a single
+  /// [PaintLayer].
+  ///
+  /// Every selected [PaintLayer] that is not a censor area is baked (offset,
+  /// scale, rotation, flip and layer opacity) into one merged layer that keeps
+  /// each stroke's own color/mode/stroke width/opacity, so the drawing looks
+  /// identical before and after merging. The merged layer is inserted at the
+  /// z-index of the top-most source layer, the originals are removed, the new
+  /// layer is selected and the whole operation is recorded as a single
+  /// undo entry.
+  ///
+  /// Non-paint and censor layers in the selection are ignored. Returns the
+  /// merged [PaintLayer], or `null` when fewer than two mergeable layers are
+  /// selected.
+  PaintLayer? mergeSelectedLayers() {
+    final selectedIds = layerInteractionManager.selectedLayerIds;
+
+    // Collect the mergeable source layers in z-order (bottom-most first) so the
+    // stroke stacking order is preserved inside the merged layer.
+    final List<PaintLayer> sources = activeLayers
+        .whereType<PaintLayer>()
+        .where(
+          (layer) =>
+              selectedIds.contains(layer.id) &&
+              PaintLayerMergeManager.isMergeable(layer),
+        )
+        .toList();
+
+    if (sources.length < 2) return null;
+
+    final PaintLayer mergedLayer = PaintLayerMergeManager.merge(sources);
+
+    final Set<String> sourceIds = sources.map((layer) => layer.id).toSet();
+    final String topMostSourceId = sources.last.id;
+
+    // Rebuild the layer list: drop every source and drop the merged layer in at
+    // the position the top-most source occupied. All other layers are copied so
+    // the previous history entry keeps its own instances (clean undo).
+    final List<Layer> newLayers = [];
+    for (final layer in activeLayers) {
+      if (layer.id == topMostSourceId) {
+        newLayers.add(mergedLayer);
+      } else if (sourceIds.contains(layer.id)) {
+        // Skip the remaining source layers.
+        continue;
+      } else {
+        newLayers.add(_layerCopyManager.copyLayer(layer));
+      }
+    }
+
+    layerInteractionManager.clearSelectedLayers();
+    addHistory(layers: newLayers);
+    layerInteractionManager.addSelectedLayer(mergedLayer.id);
+    _controllers.uiLayerCtrl.add(null);
+    setState(() {});
+
+    return mergedLayer;
+  }
+
   @override
   Widget build(BuildContext context) {
-    _theme = configs.theme ??
-        ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue.shade800,
-            brightness: Brightness.dark,
-          ),
-        );
+    _theme = configs.theme ?? defaultEditorTheme();
 
     return RecordInvisibleWidget(
       controller: _controllers.screenshot,
       child: ExtendedPopScope(
-        canPop: isPopScopeDisabled ||
-            !stateManager.canUndo ||
-            _isProcessingFinalImage,
+        canPop:
+            (isPopScopeDisabled ||
+                !stateManager.canUndo ||
+                _isProcessingFinalImage) &&
+            (!mainEditorConfigs.enableSubEditorPage || !isSubEditorOpen),
         onPopInvokedWithResult: (didPop, result) {
+          if (mainEditorConfigs.enableSubEditorPage && isSubEditorOpen) {
+            if (_navigatorKey.currentState?.canPop() == true) {
+              _navigatorKey.currentState?.pop();
+              return;
+            }
+          }
           if (!didPop &&
               !isPopScopeDisabled &&
               stateManager.canUndo &&
@@ -2553,13 +3249,77 @@ class ProImageEditorState extends State<ProImageEditor>
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       sizesManager.editorSize = constraints.biggest;
-                      return Scaffold(
+                      var scaffold = Scaffold(
                         backgroundColor: mainEditorConfigs.style.background,
                         resizeToAvoidBottomInset: false,
                         appBar: _buildAppBar(),
                         body: _buildBody(),
-                        bottomNavigationBar: _buildBottomNavBar(),
+                        bottomNavigationBar: ValueListenableBuilder(
+                          valueListenable: _audioBottomBarNotifier,
+                          builder: (_, showAudioBar, _) {
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              switchInCurve: Curves.ease,
+                              switchOutCurve: Curves.ease,
+                              transitionBuilder: (child, animation) {
+                                return SizeTransition(
+                                  sizeFactor: animation,
+                                  alignment: Alignment.topCenter,
+                                  child: child,
+                                );
+                              },
+                              layoutBuilder: (currentChild, previousChildren) {
+                                return Stack(
+                                  alignment: .bottomCenter,
+                                  children: [
+                                    ...previousChildren,
+                                    ?currentChild,
+                                  ],
+                                );
+                              },
+                              child: showAudioBar
+                                  ? AudioMainBottomBar(
+                                      configs: configs,
+                                      controller: _videoController!,
+                                      audioEditorCallbacks:
+                                          audioEditorCallbacks,
+                                      onSelectAudioTrack: () => openAudioEditor(
+                                        enforceChooseTrackPage: true,
+                                      ),
+                                      onConfirmChanges: () {
+                                        _audioBottomBarNotifier.value = false;
+                                      },
+                                    )
+                                  : _buildBottomNavBar() ??
+                                        const SizedBox.shrink(),
+                            );
+                          },
+                        ),
                       );
+
+                      if (mainEditorConfigs.enableSubEditorPage) {
+                        return Stack(
+                          children: [
+                            scaffold,
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                ignoring: !isSubEditorOpen,
+                                child: Navigator(
+                                  key: _navigatorKey,
+                                  onGenerateRoute: (settings) =>
+                                      PageRouteBuilder(
+                                        opaque: false,
+                                        pageBuilder: (context, _, _) =>
+                                            const SizedBox.shrink(),
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+
+                      return scaffold;
                     },
                   ),
                 ),
@@ -2595,89 +3355,98 @@ class ProImageEditorState extends State<ProImageEditor>
   }
 
   Widget _buildBody() {
-    return LayoutBuilder(builder: (context, constraints) {
-      sizesManager.bodySize = constraints.biggest;
-      return !_isVideoPlayerReady
-          ? _buildSetupSpinner()
-          : Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: (details) {
-                _lastDownEvent = details;
-                _tapDownTimestamp = DateTime.now();
-                _mouseService.onPointerDown(details);
-                if (layerInteractionManager.selectedLayerId.isNotEmpty ||
-                    GestureManager.instance.isBlocked) {
-                  return;
-                }
-                bool isDoubleTap = detectDoubleTap(details);
-                if (!isDoubleTap) return;
-
-                handleDoubleTap(context, details, mainEditorConfigs);
-                mainEditorCallbacks?.onDoubleTap?.call();
-              },
-              onPointerUp: (event) {
-                _mouseService.onPointerUp(event);
-                onPointerUp(event);
-
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  final offsetDistance =
-                      (event.position - _lastDownEvent!.position).distance;
-                  final timeElapsed = DateTime.now()
-                      .difference(_tapDownTimestamp)
-                      .inMilliseconds;
-
-                  // Ignore if pointer moved too much (exceeds tap slop)
-                  if (offsetDistance >= tapSlop) return;
-
-                  // Ignore if tap took too long (not a quick tap)
-                  if (timeElapsed > tapTimeElapsed) return;
-
-                  if (!configs.videoEditor.enablePlayButton) {
-                    widget.videoController?.togglePlayState();
-                  }
-                  mainEditorCallbacks?.onTap?.call();
-                });
-              },
-              onPointerSignal: isDesktop && hasSelectedLayers
-                  ? (event) {
-                      final hasMultiSelection = selectedLayers.length > 1;
-
-                      final zoomEnabled = mainEditorConfigs.enableZoom;
-                      final zoomGestureActive = interactiveViewer
-                              .currentState?.isInteractionEnabled ==
-                          true;
-
-                      if ((hasMultiSelection && zoomEnabled) ||
-                          (zoomEnabled && zoomGestureActive)) {
-                        return;
-                      }
-
-                      /// Otherwise, handle scroll as a layer scaling
-                      /// interaction.
-                      _desktopInteractionManager.mouseScroll(event,
-                          selectedLayers: selectedLayers,
-                          interactiveViewer: interactiveViewer.currentState);
-                    }
-                  : null,
-              child: GestureDetector(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        sizesManager.bodySize = constraints.biggest;
+        return !_isVideoPlayerReady
+            ? _buildVideoSetupSpinner()
+            : Listener(
                 behavior: HitTestBehavior.translucent,
-                onTap: () {
-                  /// That function is required so that multiselect works
-                  /// correctly, even when it’s empty.
+                onPointerDown: (details) {
+                  _lastDownEvent = details;
+                  _tapDownTimestamp = DateTime.now();
+                  _mouseService.onPointerDown(details);
+                  if (layerInteractionManager.selectedLayerId.isNotEmpty ||
+                      GestureManager.instance.isBlocked) {
+                    return;
+                  }
+                  bool isDoubleTap = detectDoubleTap(details);
+                  if (!isDoubleTap) return;
+
+                  handleDoubleTap(context, details, mainEditorConfigs);
+                  mainEditorCallbacks?.onDoubleTap?.call();
                 },
-                onLongPress: mainEditorCallbacks?.onLongPress,
-                onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
-                onScaleEnd: _onScaleEnd,
-                child: mainEditorConfigs.widgets.wrapBody?.call(
-                      this,
-                      _rebuildController.stream,
+                onPointerUp: (event) {
+                  if (GestureManager.instance.isBlocked) return;
+
+                  _mouseService.onPointerUp(event);
+                  onPointerUp(event);
+
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    final offsetDistance =
+                        (event.position - _lastDownEvent!.position).distance;
+                    final timeElapsed = DateTime.now()
+                        .difference(_tapDownTimestamp)
+                        .inMilliseconds;
+
+                    // Ignore if pointer moved too much (exceeds tap slop)
+                    if (offsetDistance >= tapSlop) return;
+
+                    // Ignore if tap took too long (not a quick tap)
+                    if (timeElapsed > tapTimeElapsed) return;
+
+                    if (!configs.videoEditor.enablePlayButton) {
+                      _videoController?.togglePlayState();
+                    }
+                    mainEditorCallbacks?.onTap?.call();
+                  });
+                },
+                onPointerSignal: isDesktop && hasSelectedLayers
+                    ? (event) {
+                        final hasMultiSelection = selectedLayers.length > 1;
+
+                        final zoomEnabled = mainEditorConfigs.enableZoom;
+                        final zoomGestureActive =
+                            interactiveViewer
+                                .currentState
+                                ?.isInteractionEnabled ==
+                            true;
+
+                        if ((hasMultiSelection && zoomEnabled) ||
+                            (zoomEnabled && zoomGestureActive)) {
+                          return;
+                        }
+
+                        /// Otherwise, handle scroll as a layer scaling
+                        /// interaction.
+                        _desktopInteractionManager.mouseScroll(
+                          event,
+                          selectedLayers: selectedLayers,
+                          interactiveViewer: interactiveViewer.currentState,
+                        );
+                      }
+                    : null,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () {
+                    /// That function is required so that multiselect works
+                    /// correctly, even when it’s empty.
+                  },
+                  onLongPress: mainEditorCallbacks?.onLongPress,
+                  onScaleStart: _onScaleStart,
+                  onScaleUpdate: _onScaleUpdate,
+                  onScaleEnd: _onScaleEnd,
+                  child:
+                      mainEditorConfigs.widgets.wrapBody?.call(
+                        this,
+                        _rebuildController.stream,
+                        _buildInteractiveContent(),
+                      ) ??
                       _buildInteractiveContent(),
-                    ) ??
-                    _buildInteractiveContent(),
-              ),
-            );
-    });
+                ),
+              );
+      },
+    );
   }
 
   Widget _buildInteractiveContent() {
@@ -2697,7 +3466,7 @@ class ProImageEditorState extends State<ProImageEditor>
       stateManager: stateManager,
       interactiveViewerKey: interactiveViewer,
       state: this,
-      videoController: widget.videoController,
+      videoController: _videoController,
       isVideoEditor: _isVideoEditor,
       layerDragSelectionService: _layerDragSelectionService,
     );
@@ -2729,6 +3498,8 @@ class ProImageEditorState extends State<ProImageEditor>
             openBlurEditor: openBlurEditor,
             openEmojiEditor: openEmojiEditor,
             openStickerEditor: openStickerEditor,
+            openAudioEditor: openAudioEditor,
+            openClipsEditor: openClipsEditor,
           );
   }
 
@@ -2742,11 +3513,12 @@ class ProImageEditorState extends State<ProImageEditor>
       activeLayers: activeLayers,
       isSubEditorOpen: isSubEditorOpen,
       onCheckInteractiveViewer: _checkInteractiveViewer,
-      onTextLayerTap: _onTextLayerTap,
-      onEditPaintLayer: _editPaintLayer,
+      onTextLayerTap: editTextLayer,
+      onEditPaintLayer: editPaintLayer,
       state: this,
       dragSelectionService: _layerDragSelectionService,
       mouseService: _mouseService,
+      playTimeNotifier: _videoController?.playTimeNotifier,
       onContextMenuToggled: (isOpen) {
         _isContextMenuOpen = isOpen;
       },
@@ -2784,26 +3556,29 @@ class ProImageEditorState extends State<ProImageEditor>
     );
   }
 
-  Widget _buildSetupSpinner() {
-    return Center(
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: FittedBox(
-          child: PlatformCircularProgressIndicator(configs: configs),
-        ),
-      ),
-    );
+  Widget _buildVideoSetupSpinner() {
+    return configs.videoEditor.widgets.videoSetupLoadingIndicator ??
+        Center(
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: FittedBox(
+              child: PlatformCircularProgressIndicator(configs: configs),
+            ),
+          ),
+        );
   }
 
   Widget _buildImage() {
     return MainEditorBackgroundImage(
-      backgroundImageColorFilterKey:
-          _isVideoEditor ? GlobalKey() : _backgroundImageColorFilterKey,
+      backgroundImageColorFilterKey: _isVideoEditor
+          ? GlobalKey()
+          : _backgroundImageColorFilterKey,
       heroTag: _isVideoEditor ? 'image-${configs.heroTag}' : configs.heroTag,
       configs: configs,
       editorImage: editorImage,
-      isInitialized: _isInitialized ||
+      isInitialized:
+          _isInitialized ||
           stateHistoryConfigs.initStateHistory != null ||
           _stateHistoryService.isImportInProgress,
       sizesManager: sizesManager,
@@ -2819,7 +3594,8 @@ class ProImageEditorState extends State<ProImageEditor>
       isInitialized: _isInitialized,
       sizesManager: sizesManager,
       stateManager: stateManager,
-      videoPlayer: widget.videoController!.videoPlayer,
+      videoPlayer: _videoController!.videoPlayer,
+      playTimeNotifier: _videoController?.playTimeNotifier,
     );
   }
 }

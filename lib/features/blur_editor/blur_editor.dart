@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '/core/mixins/converted_callbacks.dart';
 import '/core/mixins/converted_configs.dart';
 import '/core/mixins/standalone_editor.dart';
+import '/core/models/editor_callbacks/blur_editor_callbacks.dart';
 import '/core/models/editor_image.dart';
 import '/core/models/init_configs/blur_editor_init_configs.dart';
 import '/core/models/transform_helper.dart';
@@ -47,8 +48,10 @@ class BlurEditor extends StatefulWidget
     required this.initConfigs,
     this.editorImage,
     this.videoController,
-  }) : assert(editorImage != null || videoController != null,
-            'Either editorImage or videoController must be provided.');
+  }) : assert(
+         editorImage != null || videoController != null,
+         'Either editorImage or videoController must be provided.',
+       );
 
   /// Constructs a `BlurEditor` widget with image data loaded from memory.
   factory BlurEditor.memory(
@@ -121,12 +124,12 @@ class BlurEditor extends StatefulWidget
       editorImage: videoController != null
           ? null
           : editorImage ??
-              EditorImage(
-                byteArray: byteArray,
-                file: file,
-                networkUrl: networkUrl,
-                assetPath: assetPath,
-              ),
+                EditorImage(
+                  byteArray: byteArray,
+                  file: file,
+                  networkUrl: networkUrl,
+                  assetPath: assetPath,
+                ),
       videoController: videoController,
       initConfigs: initConfigs,
     );
@@ -165,8 +168,9 @@ class BlurEditorState extends State<BlurEditor>
   /// Update the image with the applied blur and the slider value.
   late final StreamController<void> _uiBlurStream;
 
-  late final ValueNotifier<double> _blurFactor =
-      ValueNotifier(appliedBlurFactor);
+  late final ValueNotifier<double> _blurFactor = ValueNotifier(
+    appliedBlurFactor,
+  );
 
   /// Represents the selected blur state.
   double get blurFactor => _blurFactor.value;
@@ -174,6 +178,9 @@ class BlurEditorState extends State<BlurEditor>
   set blurFactor(double value) {
     _blurFactor.value = value;
   }
+
+  @override
+  BlurEditorCallbacks? get standaloneEditorCallbacks => blurEditorCallbacks;
 
   @override
   void initState() {
@@ -208,8 +215,9 @@ class BlurEditorState extends State<BlurEditor>
       editorImage: widget.editorImage,
       blur: blurFactor,
       matrixFilterList: appliedFilters,
-      matrixTuneAdjustmentsList:
-          appliedTuneAdjustments.map((item) => item.matrix).toList(),
+      matrixTuneAdjustmentsList: appliedTuneAdjustments
+          .map((item) => item.matrix)
+          .toList(),
       transform: initialTransformConfigs,
     );
     blurEditorCallbacks?.handleDone();
@@ -239,7 +247,8 @@ class BlurEditorState extends State<BlurEditor>
   Widget build(BuildContext context) {
     return Theme(
       data: theme.copyWith(
-          tooltipTheme: theme.tooltipTheme.copyWith(preferBelow: true)),
+        tooltipTheme: theme.tooltipTheme.copyWith(preferBelow: true),
+      ),
       child: ExtendedPopScope(
         canPop: blurEditorConfigs.enableGesturePop,
         child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -251,11 +260,15 @@ class BlurEditorState extends State<BlurEditor>
             right: blurEditorConfigs.safeArea.right,
             child: RecordInvisibleWidget(
               controller: screenshotCtrl,
-              child: Scaffold(
-                backgroundColor: blurEditorConfigs.style.background,
-                appBar: _buildAppBar(),
-                body: _buildBody(),
-                bottomNavigationBar: _buildBottomNavBar(),
+              child: MediaQuery.removePadding(
+                context: context,
+                removeBottom: !blurEditorConfigs.safeArea.bottom,
+                child: Scaffold(
+                  backgroundColor: blurEditorConfigs.style.background,
+                  appBar: _buildAppBar(),
+                  body: _buildBody(),
+                  bottomNavigationBar: _buildBottomNavBar(),
+                ),
               ),
             ),
           ),
@@ -267,8 +280,10 @@ class BlurEditorState extends State<BlurEditor>
   /// Builds the app bar for the blur editor.
   PreferredSizeWidget? _buildAppBar() {
     if (blurEditorConfigs.widgets.appBar != null) {
-      return blurEditorConfigs.widgets.appBar!
-          .call(this, rebuildController.stream);
+      return blurEditorConfigs.widgets.appBar!.call(
+        this,
+        rebuildController.stream,
+      );
     }
 
     return BlurEditorAppBar(
@@ -281,49 +296,59 @@ class BlurEditorState extends State<BlurEditor>
 
   /// Builds the main content area of the editor.
   Widget _buildBody() {
-    return LayoutBuilder(builder: (context, constraints) {
-      editorBodySize = constraints.biggest;
-      return Stack(
-        alignment: Alignment.center,
-        fit: StackFit.expand,
-        children: [
-          if (initConfigs.convertToUint8List && isVideoEditor)
-            _buildBackground(),
-          ContentRecorder(
-            controller: screenshotCtrl,
-            child: Stack(
-              alignment: Alignment.center,
-              fit: StackFit.expand,
-              children: [
-                if (!initConfigs.convertToUint8List || !isVideoEditor)
-                  _buildBackground(),
-                if (blurEditorConfigs.showLayers && layers != null)
-                  LayerStack(
-                    transformHelper: TransformHelper(
-                      mainBodySize:
-                          getValidSizeOrDefault(mainBodySize, editorBodySize),
-                      mainImageSize:
-                          getValidSizeOrDefault(mainImageSize, editorBodySize),
-                      transformConfigs: initialTransformConfigs,
-                      editorBodySize: editorBodySize,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        editorBodySize = constraints.biggest;
+        return Stack(
+          alignment: Alignment.center,
+          fit: StackFit.expand,
+          children: [
+            if (initConfigs.convertToUint8List && isVideoEditor)
+              _buildBackground(),
+            ContentRecorder(
+              controller: screenshotCtrl,
+              child: Stack(
+                alignment: Alignment.center,
+                fit: StackFit.expand,
+                children: [
+                  if (!initConfigs.convertToUint8List || !isVideoEditor)
+                    _buildBackground(),
+                  if (blurEditorConfigs.showLayers && layers != null)
+                    LayerStack(
+                      transformHelper: TransformHelper(
+                        mainBodySize: getValidSizeOrDefault(
+                          mainBodySize,
+                          editorBodySize,
+                        ),
+                        mainImageSize: getValidSizeOrDefault(
+                          mainImageSize,
+                          editorBodySize,
+                        ),
+                        transformConfigs: initialTransformConfigs,
+                        editorBodySize: editorBodySize,
+                      ),
+                      overlayColor: blurEditorConfigs.style.background,
+                      configs: configs,
+                      layers: layers!,
+                      clipBehavior: Clip.none,
                     ),
-                    overlayColor: blurEditorConfigs.style.background,
-                    configs: configs,
-                    layers: layers!,
-                    clipBehavior: Clip.none,
-                  ),
-                if (blurEditorConfigs.widgets.bodyItemsRecorded != null)
-                  ...blurEditorConfigs.widgets.bodyItemsRecorded!(
-                      this, rebuildController.stream),
-              ],
+                  if (blurEditorConfigs.widgets.bodyItemsRecorded != null)
+                    ...blurEditorConfigs.widgets.bodyItemsRecorded!(
+                      this,
+                      rebuildController.stream,
+                    ),
+                ],
+              ),
             ),
-          ),
-          if (blurEditorConfigs.widgets.bodyItems != null)
-            ...blurEditorConfigs.widgets.bodyItems!(
-                this, rebuildController.stream),
-        ],
-      );
-    });
+            if (blurEditorConfigs.widgets.bodyItems != null)
+              ...blurEditorConfigs.widgets.bodyItems!(
+                this,
+                rebuildController.stream,
+              ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildBackground() {
@@ -335,22 +360,24 @@ class BlurEditorState extends State<BlurEditor>
         configs: configs,
         transformConfigs: initialTransformConfigs ?? TransformConfigs.empty(),
         child: StreamBuilder(
-            stream: _uiBlurStream.stream,
-            builder: (context, snapshot) {
-              return FilteredWidget(
-                width:
-                    getValidSizeOrDefault(mainImageSize, editorBodySize).width,
-                height:
-                    getValidSizeOrDefault(mainImageSize, editorBodySize).height,
-                configs: configs,
-                image: editorImage,
-                videoPlayer: videoController?.videoPlayer,
-                blankSize: initConfigs.mainImageSize,
-                filters: appliedFilters,
-                tuneAdjustments: appliedTuneAdjustments,
-                blurFactor: blurFactor,
-              );
-            }),
+          stream: _uiBlurStream.stream,
+          builder: (context, snapshot) {
+            return FilteredWidget(
+              width: getValidSizeOrDefault(mainImageSize, editorBodySize).width,
+              height: getValidSizeOrDefault(
+                mainImageSize,
+                editorBodySize,
+              ).height,
+              configs: configs,
+              image: editorImage,
+              videoPlayer: videoController?.videoPlayer,
+              blankSize: initConfigs.mainImageSize,
+              filters: appliedFilters,
+              tuneAdjustments: appliedTuneAdjustments,
+              blurFactor: blurFactor,
+            );
+          },
+        ),
       ),
     );
   }
@@ -358,8 +385,10 @@ class BlurEditorState extends State<BlurEditor>
   /// Builds the bottom navigation bar with blur slider.
   Widget? _buildBottomNavBar() {
     if (blurEditorConfigs.widgets.bottomBar != null) {
-      return blurEditorConfigs.widgets.bottomBar!
-          .call(this, rebuildController.stream);
+      return blurEditorConfigs.widgets.bottomBar!.call(
+        this,
+        rebuildController.stream,
+      );
     }
 
     return BlurEditorBottombar(
@@ -376,29 +405,28 @@ class BlurEditorState extends State<BlurEditor>
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
-      ..add(DiagnosticsProperty<BlurEditorInitConfigs>(
-        'initConfigs',
-        widget.initConfigs,
-      ))
-      ..add(DiagnosticsProperty<EditorImage?>(
-        'editorImage',
-        widget.editorImage,
-      ))
-      ..add(DiagnosticsProperty<ProVideoController?>(
-        'videoController',
-        widget.videoController,
-      ))
-      ..add(DoubleProperty(
-        'blurFactor',
-        blurFactor,
-      ))
-      ..add(IterableProperty<List<double>>(
-        'appliedFilters',
-        appliedFilters,
-      ))
-      ..add(IterableProperty<TuneAdjustmentMatrix>(
-        'appliedTuneAdjustments',
-        appliedTuneAdjustments,
-      ));
+      ..add(
+        DiagnosticsProperty<BlurEditorInitConfigs>(
+          'initConfigs',
+          widget.initConfigs,
+        ),
+      )
+      ..add(
+        DiagnosticsProperty<EditorImage?>('editorImage', widget.editorImage),
+      )
+      ..add(
+        DiagnosticsProperty<ProVideoController?>(
+          'videoController',
+          widget.videoController,
+        ),
+      )
+      ..add(DoubleProperty('blurFactor', blurFactor))
+      ..add(IterableProperty<List<double>>('appliedFilters', appliedFilters))
+      ..add(
+        IterableProperty<TuneAdjustmentMatrix>(
+          'appliedTuneAdjustments',
+          appliedTuneAdjustments,
+        ),
+      );
   }
 }

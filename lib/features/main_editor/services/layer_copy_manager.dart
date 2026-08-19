@@ -123,10 +123,7 @@ class LayerCopyManager {
         alpha: layer.color.a,
       ),
       colorMode: layer.colorMode,
-      offset: Offset(
-        layer.offset.dx + offset.dx,
-        layer.offset.dy + offset.dy,
-      ),
+      offset: Offset(layer.offset.dx + offset.dx, layer.offset.dy + offset.dy),
       rotation: layer.rotation,
       textStyle: layer.textStyle,
       scale: layer.scale,
@@ -137,6 +134,14 @@ class LayerCopyManager {
       customSecondaryColor: layer.customSecondaryColor,
       interaction: layer.interaction.copyWith(),
       boxConstraints: layer.boxConstraints?.copyWith(),
+      startTime: layer.startTime,
+      endTime: layer.endTime,
+      enterDuration: layer.enterDuration,
+      exitDuration: layer.exitDuration,
+      enterCurve: layer.enterCurve,
+      exitCurve: layer.exitCurve,
+      transitionBuilder: layer.transitionBuilder,
+      animations: List<LayerAnimation>.of(layer.animations),
     )..groupId = layer.groupId;
   }
 
@@ -151,10 +156,7 @@ class LayerCopyManager {
       id: enableCopyId ? layer.id : null,
       key: enableCopyKey ? layer.key : null,
       emoji: layer.emoji,
-      offset: Offset(
-        layer.offset.dx + offset.dx,
-        layer.offset.dy + offset.dy,
-      ),
+      offset: Offset(layer.offset.dx + offset.dx, layer.offset.dy + offset.dy),
       rotation: layer.rotation,
       scale: layer.scale,
       flipX: layer.flipX,
@@ -162,6 +164,14 @@ class LayerCopyManager {
       meta: layer.meta,
       interaction: layer.interaction.copyWith(),
       boxConstraints: layer.boxConstraints?.copyWith(),
+      startTime: layer.startTime,
+      endTime: layer.endTime,
+      enterDuration: layer.enterDuration,
+      exitDuration: layer.exitDuration,
+      enterCurve: layer.enterCurve,
+      exitCurve: layer.exitCurve,
+      transitionBuilder: layer.transitionBuilder,
+      animations: List<LayerAnimation>.of(layer.animations),
     )..groupId = layer.groupId;
   }
 
@@ -176,18 +186,24 @@ class LayerCopyManager {
       id: enableCopyId ? layer.id : null,
       key: enableCopyKey ? layer.key : null,
       widget: layer.widget,
-      offset: Offset(
-        layer.offset.dx + offset.dx,
-        layer.offset.dy + offset.dy,
-      ),
+      offset: Offset(layer.offset.dx + offset.dx, layer.offset.dy + offset.dy),
       rotation: layer.rotation,
       scale: layer.scale,
       flipX: layer.flipX,
       flipY: layer.flipY,
       meta: layer.meta,
+      width: layer.width,
       interaction: layer.interaction.copyWith(),
       boxConstraints: layer.boxConstraints?.copyWith(),
       exportConfigs: layer.exportConfigs.copyWith(),
+      startTime: layer.startTime,
+      endTime: layer.endTime,
+      enterDuration: layer.enterDuration,
+      exitDuration: layer.exitDuration,
+      enterCurve: layer.enterCurve,
+      exitCurve: layer.exitCurve,
+      transitionBuilder: layer.transitionBuilder,
+      animations: List<LayerAnimation>.of(layer.animations),
     )..groupId = layer.groupId;
   }
 
@@ -201,20 +217,25 @@ class LayerCopyManager {
     return PaintLayer(
       id: enableCopyId ? layer.id : null,
       key: enableCopyKey ? layer.key : null,
-      offset: Offset(
-        layer.offset.dx + offset.dx,
-        layer.offset.dy + offset.dy,
-      ),
+      offset: Offset(layer.offset.dx + offset.dx, layer.offset.dy + offset.dy),
       rotation: layer.rotation,
       scale: layer.scale,
       flipX: layer.flipX,
       flipY: layer.flipY,
       meta: layer.meta,
-      item: layer.item.copy(),
+      items: layer.items.map((item) => item.copy()).toList(),
       rawSize: layer.rawSize,
       opacity: layer.opacity,
       interaction: layer.interaction.copyWith(),
       boxConstraints: layer.boxConstraints?.copyWith(),
+      startTime: layer.startTime,
+      endTime: layer.endTime,
+      enterDuration: layer.enterDuration,
+      exitDuration: layer.exitDuration,
+      enterCurve: layer.enterCurve,
+      exitCurve: layer.exitCurve,
+      transitionBuilder: layer.transitionBuilder,
+      animations: List<LayerAnimation>.of(layer.animations),
     )..groupId = layer.groupId;
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '/core/models/editor_configs/paint_editor/paint_editor_configs.dart';
 import '/core/models/layers/paint_layer.dart';
-import '/features/paint_editor/enums/paint_editor_enum.dart';
 import '/features/paint_editor/widgets/draw_paint_item.dart';
 
 /// A widget representing a paint layer in the sticker editor.
@@ -45,22 +44,52 @@ class LayerWidgetPaintItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: layer.opacity,
-      child: CustomPaint(
-        size: layer.size,
-        willChange: willChange,
-        isComplex: layer.item.mode == PaintMode.freeStyle,
-        painter: DrawPaintItem(
-          item: layer.item,
-          scale: layer.scale,
-          selected: isSelected,
-          enabledHitDetection: enableHitDetection,
-          onHitChanged: onHitChanged,
-          paintEditorConfigs: paintEditorConfigs,
-        ),
+    final items = layer.items;
+
+    late final Widget child;
+    if (items.length == 1) {
+      // Fast path for the common single-stroke layer: keep the exact previous
+      // behavior where the layer opacity is applied once around the stroke.
+      child = _buildItem(items.first);
+    } else {
+      // Merged layer: stack every baked-in stroke, each with its own opacity.
+      child = Stack(
+        children: [
+          for (final item in items) _buildItem(item, applyItemOpacity: true),
+        ],
+      );
+    }
+
+    if (layer.opacity >= 1.0) return child;
+
+    return Opacity(opacity: layer.opacity, child: child);
+  }
+
+  /// Builds a single stroke painter sized to the layer.
+  ///
+  /// When [applyItemOpacity] is `true` (merged multi-stroke layers) the
+  /// per-stroke opacity is applied here, because the layer-level opacity is
+  /// `1.0` for merged layers and each stroke keeps its own opacity.
+  Widget _buildItem(PaintedModel item, {bool applyItemOpacity = false}) {
+    Widget painter = CustomPaint(
+      size: layer.size,
+      willChange: willChange,
+      isComplex: item.mode.isFreeStyleMode,
+      painter: DrawPaintItem(
+        item: item,
+        scale: layer.scale,
+        selected: isSelected,
+        enabledHitDetection: enableHitDetection,
+        onHitChanged: onHitChanged,
+        paintEditorConfigs: paintEditorConfigs,
       ),
     );
+
+    if (applyItemOpacity && item.opacity < 1.0) {
+      painter = Opacity(opacity: item.opacity, child: painter);
+    }
+
+    return painter;
   }
 
   @override

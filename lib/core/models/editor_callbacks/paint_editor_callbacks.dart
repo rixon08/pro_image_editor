@@ -34,6 +34,7 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
     super.onDone,
     super.onCloseEditor,
     super.onUpdateUI,
+    super.onKeyboardEvent,
   });
 
   /// A callback function that is triggered when the line width changes.
@@ -330,9 +331,11 @@ class PaintEditorCallbacks extends StandaloneEditorCallbacks {
     Function()? onRedo,
     Function()? onUndo,
     Function()? onCloseEditor,
+    bool Function(KeyEvent event)? onKeyboardEvent,
     Future<PaintLayer?> Function(PaintLayer layer)? onEditLayer,
   }) {
     return PaintEditorCallbacks(
+      onKeyboardEvent: onKeyboardEvent ?? this.onKeyboardEvent,
       onLineWidthChanged: onLineWidthChanged ?? this.onLineWidthChanged,
       onPaintModeChanged: onPaintModeChanged ?? this.onPaintModeChanged,
       onToggleFill: onToggleFill ?? this.onToggleFill,

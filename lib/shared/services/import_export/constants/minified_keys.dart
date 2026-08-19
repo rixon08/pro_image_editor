@@ -11,10 +11,7 @@ const Map<String, String> kMinifiedMainKeys = {
 };
 
 /// A constant map containing minified size keys for import/export services.
-const Map<String, String> kMinifiedSizeKeys = {
-  'width': 'w',
-  'height': 'h',
-};
+const Map<String, String> kMinifiedSizeKeys = {'width': 'w', 'height': 'h'};
 
 /// A constant map containing minified history keys for import/export services.
 const Map<String, String> kMinifiedHistoryKeys = {
@@ -23,6 +20,7 @@ const Map<String, String> kMinifiedHistoryKeys = {
   'tune': 'a',
   'blur': 'b',
   'transform': 't',
+  'meta': 'm',
 };
 
 /// A constant map containing minified layer keys for import/export services.
@@ -30,6 +28,7 @@ const Map<String, String> kMinifiedLayerKeys = {
   'x': 'x',
   'y': 'y',
   'rotation': 'r',
+  'width': 'w',
   'scale': 's',
   'flipX': 'fx',
   'flipY': 'fy',
@@ -38,6 +37,7 @@ const Map<String, String> kMinifiedLayerKeys = {
   'emoji': 'e',
   'text': 'te',
   'item': 'i',
+  'items': 'it',
   'rawSize': 'rs',
   'opacity': 'o',
   'exportConfigs': 'ec',
@@ -59,6 +59,14 @@ const Map<String, String> kMinifiedLayerKeys = {
   'meta': 'm',
   'boxConstraints': 'bx',
   'maxTextWidth': 'mt',
+  'shadows': 'sh',
+  'startTime': 'st',
+  'endTime': 'et',
+  'enterDuration': 'ed',
+  'exitDuration': 'xd',
+  'enterCurve': 'ev',
+  'exitCurve': 'xv',
+  'animations': 'an',
 
   /// Only in version < 8.0.0
   'enableInteraction': 'ei',

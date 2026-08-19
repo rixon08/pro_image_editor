@@ -12,16 +12,13 @@ class OutsideRenderSemanticsGestureHandler
   /// Creates a render object that listens for specific semantic gestures.
   OutsideRenderSemanticsGestureHandler({
     super.child,
-    GestureTapCallback? onTap,
-    GestureLongPressCallback? onLongPress,
-    GestureDragUpdateCallback? onHorizontalDragUpdate,
-    GestureDragUpdateCallback? onVerticalDragUpdate,
+    this._onTap,
+    this._onLongPress,
+    this._onHorizontalDragUpdate,
+    this._onVerticalDragUpdate,
     this.scrollFactor = 0.8,
     super.behavior,
-  })  : _onTap = onTap,
-        _onLongPress = onLongPress,
-        _onHorizontalDragUpdate = onHorizontalDragUpdate,
-        _onVerticalDragUpdate = onVerticalDragUpdate;
+  });
 
   /// If non-null, the set of actions to allow. Other actions will be omitted,
   /// even if their callback is provided.
@@ -146,44 +143,52 @@ class OutsideRenderSemanticsGestureHandler
   void _performSemanticScrollLeft() {
     if (onHorizontalDragUpdate != null) {
       final double primaryDelta = size.width * -scrollFactor;
-      onHorizontalDragUpdate!(DragUpdateDetails(
-        delta: Offset(primaryDelta, 0.0),
-        primaryDelta: primaryDelta,
-        globalPosition: localToGlobal(size.center(Offset.zero)),
-      ));
+      onHorizontalDragUpdate!(
+        DragUpdateDetails(
+          delta: Offset(primaryDelta, 0.0),
+          primaryDelta: primaryDelta,
+          globalPosition: localToGlobal(size.center(Offset.zero)),
+        ),
+      );
     }
   }
 
   void _performSemanticScrollRight() {
     if (onHorizontalDragUpdate != null) {
       final double primaryDelta = size.width * scrollFactor;
-      onHorizontalDragUpdate!(DragUpdateDetails(
-        delta: Offset(primaryDelta, 0.0),
-        primaryDelta: primaryDelta,
-        globalPosition: localToGlobal(size.center(Offset.zero)),
-      ));
+      onHorizontalDragUpdate!(
+        DragUpdateDetails(
+          delta: Offset(primaryDelta, 0.0),
+          primaryDelta: primaryDelta,
+          globalPosition: localToGlobal(size.center(Offset.zero)),
+        ),
+      );
     }
   }
 
   void _performSemanticScrollUp() {
     if (onVerticalDragUpdate != null) {
       final double primaryDelta = size.height * -scrollFactor;
-      onVerticalDragUpdate!(DragUpdateDetails(
-        delta: Offset(0.0, primaryDelta),
-        primaryDelta: primaryDelta,
-        globalPosition: localToGlobal(size.center(Offset.zero)),
-      ));
+      onVerticalDragUpdate!(
+        DragUpdateDetails(
+          delta: Offset(0.0, primaryDelta),
+          primaryDelta: primaryDelta,
+          globalPosition: localToGlobal(size.center(Offset.zero)),
+        ),
+      );
     }
   }
 
   void _performSemanticScrollDown() {
     if (onVerticalDragUpdate != null) {
       final double primaryDelta = size.height * scrollFactor;
-      onVerticalDragUpdate!(DragUpdateDetails(
-        delta: Offset(0.0, primaryDelta),
-        primaryDelta: primaryDelta,
-        globalPosition: localToGlobal(size.center(Offset.zero)),
-      ));
+      onVerticalDragUpdate!(
+        DragUpdateDetails(
+          delta: Offset(0.0, primaryDelta),
+          primaryDelta: primaryDelta,
+          globalPosition: localToGlobal(size.center(Offset.zero)),
+        ),
+      );
     }
   }
 
