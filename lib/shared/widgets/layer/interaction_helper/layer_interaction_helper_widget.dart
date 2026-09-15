@@ -1,5 +1,6 @@
 // Flutter imports:
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -293,6 +294,20 @@ class _LayerInteractionHelperWidgetState
 
         final Matrix4 transform = info.childPaintTransform.clone();
 
+        // The paint transform already contains the zoom factor from the
+        // editor's interactive viewer. The interaction buttons are
+        // counter-scaled with it so they keep a constant size on screen.
+        //
+        // The scale is derived from the x/y basis vectors instead of
+        // `getMaxScaleOnAxis`, because the latter also measures the z-axis
+        // which the layer's perspective entry turns into a larger value.
+        final storage = transform.storage;
+        final viewerScale = max(
+          sqrt(storage[0] * storage[0] + storage[1] * storage[1]),
+          sqrt(storage[4] * storage[4] + storage[5] * storage[5]),
+        );
+        final buttonScale = viewerScale <= 0 ? 1.0 : 1 / viewerScale;
+
         // The child size
         final childWidth = info.childSize.width;
         final childHeight = info.childSize.height;
@@ -316,7 +331,7 @@ class _LayerInteractionHelperWidgetState
                   child: Transform.flip(
                     flipX: _layer.flipX,
                     flipY: _layer.flipY,
-                    child: _buildSelectionOverlay(),
+                    child: _buildSelectionOverlay(buttonScale),
                   ),
                 );
               }),
@@ -329,9 +344,10 @@ class _LayerInteractionHelperWidgetState
     );
   }
 
-  Widget _buildSelectionOverlay() {
+  Widget _buildSelectionOverlay(double buttonScale) {
     List<LayerInteractionItem> children =
-        layerInteraction.widgets.children ?? _buildDefaultInteractions();
+        layerInteraction.widgets.children ??
+            _buildDefaultInteractions(buttonScale);
 
     return TooltipVisibility(
       visible: layerInteraction.style.showTooltips,
@@ -363,25 +379,28 @@ class _LayerInteractionHelperWidgetState
     );
   }
 
-  List<LayerInteractionItem> _buildDefaultInteractions() {
+  List<LayerInteractionItem> _buildDefaultInteractions(double buttonScale) {
     return [
       if (_isLayerEditable())
         (rebuildStream, layer, interactions) => ReactiveWidget(
               stream: rebuildStream,
-              builder: (_) => _buildEditButton(interactions),
+              builder: (_) => _buildEditButton(interactions, buttonScale),
             ),
       (rebuildStream, layer, interactions) => ReactiveWidget(
             stream: rebuildStream,
-            builder: (_) => _buildRemoveButton(interactions),
+            builder: (_) => _buildRemoveButton(interactions, buttonScale),
           ),
       (rebuildStream, layer, interactions) => ReactiveWidget(
             stream: rebuildStream,
-            builder: (_) => _buildRotateScaleButton(interactions),
+            builder: (_) => _buildRotateScaleButton(interactions, buttonScale),
           ),
     ];
   }
 
-  Widget _buildRotateScaleButton(LayerItemInteractions interactions) {
+  Widget _buildRotateScaleButton(
+    LayerItemInteractions interactions,
+    double buttonScale,
+  ) {
     return layerInteraction.widgets.rotateScaleButton?.call(
           _rebuildStream.stream,
           _handleScaleRotateDown,
@@ -391,21 +410,30 @@ class _LayerInteractionHelperWidgetState
         Positioned(
           bottom: 0,
           right: 0,
-          child: LayerInteractionButton(
-            rotation: _rotation,
-            onScaleRotateDown: interactions.scaleRotateDown,
-            onScaleRotateUp: interactions.scaleRotateUp,
-            buttonRadius: layerInteraction.style.buttonRadius,
-            cursor: layerInteraction.style.rotateScaleCursor,
-            icon: layerInteraction.icons.rotateScale,
-            tooltip: i18n.layerInteraction.rotateScale,
-            color: layerInteraction.style.buttonScaleRotateColor,
-            background: layerInteraction.style.buttonScaleRotateBackground,
+          child: Transform.scale(
+            scale: buttonScale,
+            // Scaling from the center keeps the button anchored on the
+            // border corner.
+            alignment: Alignment.center,
+            child: LayerInteractionButton(
+              rotation: _rotation,
+              onScaleRotateDown: interactions.scaleRotateDown,
+              onScaleRotateUp: interactions.scaleRotateUp,
+              buttonRadius: layerInteraction.style.buttonRadius,
+              cursor: layerInteraction.style.rotateScaleCursor,
+              icon: layerInteraction.icons.rotateScale,
+              tooltip: i18n.layerInteraction.rotateScale,
+              color: layerInteraction.style.buttonScaleRotateColor,
+              background: layerInteraction.style.buttonScaleRotateBackground,
+            ),
           ),
         );
   }
 
-  Widget _buildEditButton(LayerItemInteractions interactions) {
+  Widget _buildEditButton(
+    LayerItemInteractions interactions,
+    double buttonScale,
+  ) {
     return layerInteraction.widgets.editButton?.call(
           _rebuildStream.stream,
           () => widget.onEditLayer?.call(),
@@ -414,20 +442,27 @@ class _LayerInteractionHelperWidgetState
         Positioned(
           top: 0,
           right: 0,
-          child: LayerInteractionButton(
-            rotation: _rotation,
-            onTap: interactions.edit,
-            buttonRadius: layerInteraction.style.buttonRadius,
-            cursor: layerInteraction.style.editCursor,
-            icon: layerInteraction.icons.edit,
-            tooltip: i18n.layerInteraction.edit,
-            color: layerInteraction.style.buttonEditTextColor,
-            background: layerInteraction.style.buttonEditTextBackground,
+          child: Transform.scale(
+            scale: buttonScale,
+            alignment: Alignment.center,
+            child: LayerInteractionButton(
+              rotation: _rotation,
+              onTap: interactions.edit,
+              buttonRadius: layerInteraction.style.buttonRadius,
+              cursor: layerInteraction.style.editCursor,
+              icon: layerInteraction.icons.edit,
+              tooltip: i18n.layerInteraction.edit,
+              color: layerInteraction.style.buttonEditTextColor,
+              background: layerInteraction.style.buttonEditTextBackground,
+            ),
           ),
         );
   }
 
-  Widget _buildRemoveButton(LayerItemInteractions interactions) {
+  Widget _buildRemoveButton(
+    LayerItemInteractions interactions,
+    double buttonScale,
+  ) {
     return layerInteraction.widgets.removeButton?.call(
           _rebuildStream.stream,
           () => widget.onRemoveLayer?.call(),
@@ -436,15 +471,19 @@ class _LayerInteractionHelperWidgetState
         Positioned(
           top: 0,
           left: 0,
-          child: LayerInteractionButton(
-            rotation: _rotation,
-            onTap: interactions.remove,
-            buttonRadius: layerInteraction.style.buttonRadius,
-            cursor: layerInteraction.style.removeCursor,
-            icon: layerInteraction.icons.remove,
-            tooltip: i18n.layerInteraction.remove,
-            color: layerInteraction.style.buttonRemoveColor,
-            background: layerInteraction.style.buttonRemoveBackground,
+          child: Transform.scale(
+            scale: buttonScale,
+            alignment: Alignment.center,
+            child: LayerInteractionButton(
+              rotation: _rotation,
+              onTap: interactions.remove,
+              buttonRadius: layerInteraction.style.buttonRadius,
+              cursor: layerInteraction.style.removeCursor,
+              icon: layerInteraction.icons.remove,
+              tooltip: i18n.layerInteraction.remove,
+              color: layerInteraction.style.buttonRemoveColor,
+              background: layerInteraction.style.buttonRemoveBackground,
+            ),
           ),
         );
   }
