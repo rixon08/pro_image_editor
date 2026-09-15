@@ -10,16 +10,54 @@ import 'package:pro_image_editor/pro_image_editor.dart';
 import 'package:pro_image_editor/shared/widgets/layer/interaction_helper/layer_interaction_button.dart';
 import 'package:pro_image_editor/shared/widgets/layer/layer_widget.dart';
 
-const _configs = ProImageEditorConfigs(
+const _defaultConfigs = ProImageEditorConfigs(
   layerInteraction: LayerInteractionConfigs(
     selectable: LayerInteractionSelectable.enabled,
+  ),
+);
+
+/// Mirrors how an app supplies its own interaction buttons, opting into the
+/// zoom compensation through [LayerInteractionScale].
+final _customChildrenConfigs = ProImageEditorConfigs(
+  layerInteraction: LayerInteractionConfigs(
+    selectable: LayerInteractionSelectable.enabled,
+    widgets: LayerInteractionWidgets(
+      children: [
+        (rebuildStream, layer, interactions) => ReactiveWidget(
+              stream: rebuildStream,
+              builder: (context) => Positioned(
+                bottom: 0,
+                right: 0,
+                child: Transform.scale(
+                  scale: LayerInteractionScale.of(context),
+                  alignment: Alignment.center,
+                  child: LayerInteractionButton(
+                    rotation: -layer.rotation,
+                    onScaleRotateDown: interactions.scaleRotateDown,
+                    onScaleRotateUp: interactions.scaleRotateUp,
+                    buttonRadius: 10,
+                    cursor: SystemMouseCursors.click,
+                    icon: Icons.sync,
+                    tooltip: 'Rotate and Scale',
+                    color: Colors.black,
+                    background: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+      ],
+    ),
   ),
 );
 
 /// Renders a selected layer inside a zoomed [Transform], mimicking the
 /// editor's interactive viewer, and returns the on-screen rect of the
 /// rotate/scale button.
-Future<Rect> _rotateButtonRectAtZoom(WidgetTester tester, double zoom) async {
+Future<Rect> _rotateButtonRectAtZoom(
+  WidgetTester tester,
+  double zoom, {
+  required ProImageEditorConfigs configs,
+}) async {
   final layer = TextLayer(
     text: 'Test Text',
     color: Colors.white,
@@ -32,7 +70,7 @@ Future<Rect> _rotateButtonRectAtZoom(WidgetTester tester, double zoom) async {
 
   final manager = LayerInteractionManager(
     helperLinesCallbacks: null,
-    configs: _configs,
+    configs: configs,
     onSelectedLayersChanged: (_) {},
   );
 
@@ -54,7 +92,7 @@ Future<Rect> _rotateButtonRectAtZoom(WidgetTester tester, double zoom) async {
                     LayerWidget(
                       editorBodySize: const Size(300, 300),
                       layer: layer,
-                      configs: _configs,
+                      configs: configs,
                       layerInteractionManager: manager,
                       isInteractive: true,
                     ),
@@ -75,18 +113,36 @@ Future<Rect> _rotateButtonRectAtZoom(WidgetTester tester, double zoom) async {
   await tester.pump();
 
   return tester.getRect(find.ancestor(
-    of: find.byIcon(_configs.layerInteraction.icons.rotateScale),
+    of: find.byIcon(Icons.sync),
     matching: find.byType(LayerInteractionButton),
   ));
 }
 
 void main() {
-  group('layer interaction buttons keep a constant size while zoomed', () {
-    const expectedSize = Size(26, 26);
+  const expectedSize = Size(26, 26);
 
+  group('default interaction buttons keep a constant size while zoomed', () {
     for (final zoom in [1.0, 2.0, 4.0, 8.0]) {
       testWidgets('at zoom ${zoom}x', (tester) async {
-        final rect = await _rotateButtonRectAtZoom(tester, zoom);
+        final rect = await _rotateButtonRectAtZoom(
+          tester,
+          zoom,
+          configs: _defaultConfigs,
+        );
+
+        expect(rect.size, expectedSize);
+      });
+    }
+  });
+
+  group('custom interaction buttons can opt into the zoom compensation', () {
+    for (final zoom in [1.0, 2.0, 4.0, 8.0]) {
+      testWidgets('at zoom ${zoom}x', (tester) async {
+        final rect = await _rotateButtonRectAtZoom(
+          tester,
+          zoom,
+          configs: _customChildrenConfigs,
+        );
 
         expect(rect.size, expectedSize);
       });

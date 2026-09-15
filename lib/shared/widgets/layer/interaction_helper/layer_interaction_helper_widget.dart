@@ -17,6 +17,7 @@ import '/shared/widgets/reactive_widgets/reactive_custom_widget.dart';
 import '../models/layer_item_interaction.dart';
 import 'layer_interaction_border_painter.dart';
 import 'layer_interaction_button.dart';
+import 'layer_interaction_scale.dart';
 
 /// A stateful widget that provides interactive controls for manipulating
 /// layers in an image editor.
@@ -349,32 +350,35 @@ class _LayerInteractionHelperWidgetState
         layerInteraction.widgets.children ??
             _buildDefaultInteractions(buttonScale);
 
-    return TooltipVisibility(
-      visible: layerInteraction.style.showTooltips,
-      child: Stack(
-        fit: StackFit.passthrough,
-        alignment: Alignment.center,
-        children: [
-          layerInteraction.widgets.border?.call(widget.child, _layer) ??
-              Padding(
-                padding: EdgeInsets.all(
-                  layerInteraction.style.buttonRadius +
-                      layerInteraction.style.strokeWidth,
-                ),
-                child: CustomPaint(
-                  foregroundPainter: LayerInteractionBorderPainter(
-                    style: layerInteraction.style,
+    return LayerInteractionScale(
+      scale: buttonScale,
+      child: TooltipVisibility(
+        visible: layerInteraction.style.showTooltips,
+        child: Stack(
+          fit: StackFit.passthrough,
+          alignment: Alignment.center,
+          children: [
+            layerInteraction.widgets.border?.call(widget.child, _layer) ??
+                Padding(
+                  padding: EdgeInsets.all(
+                    layerInteraction.style.buttonRadius +
+                        layerInteraction.style.strokeWidth,
+                  ),
+                  child: CustomPaint(
+                    foregroundPainter: LayerInteractionBorderPainter(
+                      style: layerInteraction.style,
+                    ),
                   ),
                 ),
+            ...children.map(
+              (item) => item.call(
+                _rebuildStream.stream,
+                _layer,
+                _layerInteractions,
               ),
-          ...children.map(
-            (item) => item.call(
-              _rebuildStream.stream,
-              _layer,
-              _layerInteractions,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

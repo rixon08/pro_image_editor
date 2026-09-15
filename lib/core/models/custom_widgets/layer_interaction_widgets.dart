@@ -1,5 +1,6 @@
 import 'utils/custom_widgets_typedef.dart';
 
+export '/shared/widgets/layer/interaction_helper/layer_interaction_scale.dart';
 export '/shared/widgets/layer/models/layer_item_interaction.dart';
 
 /// A class that defines a layer of interaction for custom widgets,
@@ -65,6 +66,11 @@ class LayerInteractionWidgets {
   final LayerInteractionScaleRotateButton? rotateScaleButton;
 
   /// A list of child widgets to be displayed within the interaction layer.
+  ///
+  /// These widgets are painted through the editor's zoom transform, so they
+  /// grow together with the zoom. Unlike the default buttons, they do not
+  /// compensate for this automatically. Wrap them in a [Transform.scale] with
+  /// [LayerInteractionScale.of] to keep them at a constant size on screen.
   ///
   /// **Example:**
   /// ```dart
