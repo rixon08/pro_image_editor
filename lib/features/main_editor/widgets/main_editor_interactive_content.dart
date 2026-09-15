@@ -123,53 +123,67 @@ class MainEditorInteractiveContent extends StatelessWidget {
   Widget build(BuildContext context) {
     bool hasSelectedLayers = layerInteractionManager.hasSelectedLayers;
 
-    return Center(
-      child: Stack(
-        children: [
-          MainEditorFontPreloader(emojiEditorConfigs: configs.emojiEditor),
-          Padding(
-            padding: hasSelectedLayers &&
-                    configs.layerInteraction.hideToolbarOnInteraction
-                ? EdgeInsets.only(
-                    top: sizesManager.appBarHeight,
-                    bottom: sizesManager.bottomBarHeight,
-                  )
-                : EdgeInsets.zero,
-            child: _buildInteractiveViewer(),
-          ),
+    /// Hosts the layer-selection overlays of the interaction helper widget.
+    ///
+    /// The overlays must not be captured by the [ContentRecorder], which is why
+    /// they are rendered through an `OverlayPortal`. Without an overlay of our
+    /// own they would attach to the app's overlay, which sits next to the
+    /// editor route instead of inside it. Pointer events on the interaction
+    /// buttons would then never travel through the editor's gesture detector,
+    /// leaving the rotate-scale button without any effect.
+    ///
+    /// Clipping is disabled so buttons of layers near the editor bounds stay
+    /// fully visible.
+    return Overlay.wrap(
+      clipBehavior: Clip.none,
+      child: Center(
+        child: Stack(
+          children: [
+            MainEditorFontPreloader(emojiEditorConfigs: configs.emojiEditor),
+            Padding(
+              padding: hasSelectedLayers &&
+                      configs.layerInteraction.hideToolbarOnInteraction
+                  ? EdgeInsets.only(
+                      top: sizesManager.appBarHeight,
+                      bottom: sizesManager.bottomBarHeight,
+                    )
+                  : EdgeInsets.zero,
+              child: _buildInteractiveViewer(),
+            ),
 
-          /// Build crop area overlay
-          if (configs.imageGeneration.cropToImageBounds)
-            _buildCropAreaOverlay(),
+            /// Build crop area overlay
+            if (configs.imageGeneration.cropToImageBounds)
+              _buildCropAreaOverlay(),
 
-          /// Build video controls
-          if (isVideoEditor)
-            AnimatedOpacity(
-              opacity: hasSelectedLayers ? 0 : 1,
-              duration: configs.layerInteraction.videoControlsSwitchDuration,
-              child: IgnorePointer(
-                ignoring: hasSelectedLayers,
-                child: VideoEditorConfigurable(
-                  controller: videoController!,
-                  child: const VideoEditorControlsWidget(),
+            /// Build video controls
+            if (isVideoEditor)
+              AnimatedOpacity(
+                opacity: hasSelectedLayers ? 0 : 1,
+                duration: configs.layerInteraction.videoControlsSwitchDuration,
+                child: IgnorePointer(
+                  ignoring: hasSelectedLayers,
+                  child: VideoEditorConfigurable(
+                    controller: videoController!,
+                    child: const VideoEditorControlsWidget(),
+                  ),
                 ),
               ),
-            ),
 
-          /// Build helper content
-          if (!processFinalImage) ...[
-            buildHelperLines(),
-            buildRemoveArea(),
-            _buildLayerSelector(),
+            /// Build helper content
+            if (!processFinalImage) ...[
+              buildHelperLines(),
+              buildRemoveArea(),
+              _buildLayerSelector(),
+            ],
+
+            /// Build custom body items
+            if (configs.mainEditor.widgets.bodyItems != null)
+              ...configs.mainEditor.widgets.bodyItems!(
+                state,
+                rebuildController.stream,
+              ),
           ],
-
-          /// Build custom body items
-          if (configs.mainEditor.widgets.bodyItems != null)
-            ...configs.mainEditor.widgets.bodyItems!(
-              state,
-              rebuildController.stream,
-            ),
-        ],
+        ),
       ),
     );
   }
