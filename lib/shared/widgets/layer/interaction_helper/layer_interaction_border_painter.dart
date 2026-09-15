@@ -198,7 +198,14 @@ class LayerInteractionBorderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return false;
+  bool shouldRepaint(LayerInteractionBorderPainter oldDelegate) {
+    // Compared field by field because [LayerInteractionStyle] does not
+    // implement equality, and this painter is recreated on every frame while
+    // the layer is selected.
+    return oldDelegate.style.strokeWidth != style.strokeWidth ||
+        oldDelegate.style.borderColor != style.borderColor ||
+        oldDelegate.style.borderStyle != style.borderStyle ||
+        oldDelegate.style.borderElementWidth != style.borderElementWidth ||
+        oldDelegate.style.borderElementSpace != style.borderElementSpace;
   }
 }

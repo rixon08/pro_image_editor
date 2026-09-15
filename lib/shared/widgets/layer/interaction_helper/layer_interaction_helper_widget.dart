@@ -366,7 +366,16 @@ class _LayerInteractionHelperWidgetState
                   ),
                   child: CustomPaint(
                     foregroundPainter: LayerInteractionBorderPainter(
-                      style: layerInteraction.style,
+                      style: layerInteraction.style.copyWith(
+                        strokeWidth:
+                            layerInteraction.style.strokeWidth * buttonScale,
+                        borderElementWidth:
+                            layerInteraction.style.borderElementWidth *
+                                buttonScale,
+                        borderElementSpace:
+                            layerInteraction.style.borderElementSpace *
+                                buttonScale,
+                      ),
                     ),
                   ),
                 ),
