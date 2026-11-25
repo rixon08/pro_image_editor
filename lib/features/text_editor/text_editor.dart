@@ -90,6 +90,10 @@ class TextEditorState extends State<TextEditor>
   late double _fontScale;
   final double _cursorWidth = 2.0;
 
+  /// Guards against double-pop races (e.g. double-tap Done/Back while the
+  /// translucent route is still visible during its close animation).
+  bool _isClosing = false;
+
   double? get _maxTextWidth {
     if (textEditorConfigs.enableImageBoundaryTextWrap &&
         widget.imageSize != Size.zero) {
@@ -306,32 +310,44 @@ class TextEditorState extends State<TextEditor>
 
   /// Closes the editor without applying changes.
   void close() {
-    Navigator.pop(context);
+    if (!mounted || _isClosing) return;
+    _isClosing = true;
+
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
     textEditorCallbacks?.handleCloseEditor();
   }
 
   /// Handles the "Done" action, either by applying changes or closing the
   /// editor.
   void done() {
-    if (textCtrl.text.trim().isNotEmpty || widget.layer != null) {
-      TextLayer layer = TextLayer(
-        text: textCtrl.text.trim(),
-        background: _backgroundColor,
-        color: _textColor,
-        align: align,
-        fontScale: _fontScale,
-        colorMode: backgroundColorMode,
-        textStyle: selectedTextStyle,
-        customSecondaryColor: _secondaryColor != null,
-        maxTextWidth: (textEditorConfigs.enableAutoOverflow ||
-                textEditorConfigs.enableImageBoundaryTextWrap)
-            ? _maxTextWidth
-            : null,
-      );
+    if (!mounted || _isClosing) return;
+    _isClosing = true;
 
-      Navigator.of(context).pop(layer);
-    } else {
-      Navigator.of(context).pop();
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      if (textCtrl.text.trim().isNotEmpty || widget.layer != null) {
+        TextLayer layer = TextLayer(
+          text: textCtrl.text.trim(),
+          background: _backgroundColor,
+          color: _textColor,
+          align: align,
+          fontScale: _fontScale,
+          colorMode: backgroundColorMode,
+          textStyle: selectedTextStyle,
+          customSecondaryColor: _secondaryColor != null,
+          maxTextWidth: (textEditorConfigs.enableAutoOverflow ||
+                  textEditorConfigs.enableImageBoundaryTextWrap)
+              ? _maxTextWidth
+              : null,
+        );
+
+        navigator.pop(layer);
+      } else {
+        navigator.pop();
+      }
     }
     textEditorCallbacks?.handleDone();
   }
